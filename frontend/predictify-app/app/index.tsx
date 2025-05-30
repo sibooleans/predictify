@@ -1,9 +1,17 @@
+type Prediction = {
+  stock: string;
+  predicted_price: number;
+  confidence: number;
+  volatility: string;
+  trend: string;
+};
+
 import { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
 
 export default function HomeScreen() {
   const [stock, setStock] = useState('');
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState<Prediction | null>(null);
 
   const getPrediction = async () => {
     try {
