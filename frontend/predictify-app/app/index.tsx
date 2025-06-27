@@ -51,3 +51,12 @@ const styles = StyleSheet.create({
   input: { borderColor: '#ccc', borderWidth: 1, padding: 10, marginBottom: 10 },
   result: { marginTop: 20 }
 });
+
+import { Link } from 'expo-router';
+
+<Link href="/signup">
+  <Text style={{ color: '#00ccff', marginTop: 10 }}>
+    Don't have an account? Sign up here
+  </Text>
+</Link>
+
