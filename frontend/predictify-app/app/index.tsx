@@ -1,3 +1,7 @@
+import { useState } from 'react';
+import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
+import { Link } from 'expo-router';
+
 type Prediction = {
   stock: string;
   predicted_price: number;
@@ -5,9 +9,6 @@ type Prediction = {
   volatility: string;
   trend: string;
 };
-
-import { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet } from 'react-native';
 
 export default function HomeScreen() {
   const [stock, setStock] = useState('');
@@ -33,6 +34,15 @@ export default function HomeScreen() {
         onChangeText={setStock}
       />
       <Button title="Predict" onPress={getPrediction} />
+
+      
+      <Link href="/auth/signup">
+        <Text style={{ color: '#00ccff', marginTop: 10 }}>
+          Don't have an account? Sign up here
+        </Text>
+      </Link>
+
+
       {result && (
         <View style={styles.result}>
           <Text>Predicted Price: ${result.predicted_price}</Text>
@@ -52,11 +62,5 @@ const styles = StyleSheet.create({
   result: { marginTop: 20 }
 });
 
-import { Link } from 'expo-router';
 
-<Link href="/signup">
-  <Text style={{ color: '#00ccff', marginTop: 10 }}>
-    Don't have an account? Sign up here
-  </Text>
-</Link>
 
