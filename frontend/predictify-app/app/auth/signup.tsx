@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import auth from '../../config/authentication';
+//import auth from '../config/authentication';
+import auth from 'C:/Users/sibin/OneDrive/Documents/GitHub/predictify/frontend/predictify-app/config/authentication';
 
 export default function Signup() {
     const [email, setEmail] = useState('');
