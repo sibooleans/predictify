@@ -36,7 +36,7 @@ export default function HomeScreen() {
       <Button title="Predict" onPress={getPrediction} />
 
       
-      <Link href="/auth/signup">
+      <Link href="/authent/signup">
         <Text style={{ color: '#00ccff', marginTop: 10 }}>
           Don't have an account? Sign up here
         </Text>

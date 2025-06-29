@@ -1,40 +1,44 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-//import auth from '../config/authentication';
-import auth from 'C:/Users/sibin/OneDrive/Documents/GitHub/predictify/frontend/predictify-app/config/authentication';
+import auth from '../../config/authentication';
+import { useRouter } from 'expo-router';
 
 export default function Signup() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const router = useRouter();
 
+    //make sure all 3 same
     const handleCreateAccount = async () => {
         if (!email || !password || !confirmPassword) {
             Alert.alert('Missing Fields', 'Please fill in all fields.');
             return
         }
-
+        //strong password. maybe can consider adding symbol and number also? seems unnecessary now tho
         if (password.length < 6) {
             Alert.alert('Weak password', 'Password must be at least 6 characters long.');
             return;
         }
-
+        //check the string same.
         if (password != confirmPassword) {
             Alert.alert('Error', 'Passwords do not match.');
             return;
         }
-
+        //redirect from signup to login. only 4 first time.
+        //flow is signup => login => home screen
         try {
             await createUserWithEmailAndPassword(auth, email, password);
             Alert.alert('Account Created', 'You can now log in with your new account.');
-// can navigate to login screen here    
+            router.replace('/authent/login');
         } catch (err: any) {
             console.log('Signup error:', err.message);
             Alert.alert('Error', err.message);
+            //throw error if probs.
         }
     };
-
+    //formatting
     return (
     <View style={styles.container}>
         <Text style={styles.title}>Sign Up</Text>

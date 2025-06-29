@@ -3,10 +3,12 @@ import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import auth from '../../config/authentication';
 import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const router = useRouter(); 
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -17,6 +19,8 @@ export default function Login() {
         try {
             await signInWithEmailAndPassword(auth, email, password);
             Alert.alert('Welcome back!', 'Login successful.');
+            router.replace('/(tabs)');
+
             // still needa redirect to main screen
         } catch (error: any) {
             console.log('Login error:', error.message);
@@ -45,7 +49,7 @@ export default function Login() {
 
             <Button title="Log In" onPress={handleLogin} />
 
-            <Link href="/auth/signup">
+            <Link href="/authent/signup">
                 <Text style={styles.link}>Don’t have an account? Sign up here</Text>
             </Link>
         </View>
