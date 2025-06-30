@@ -1,110 +1,92 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 
-import { Collapsible } from '@/components/Collapsible';
-import { ExternalLink } from '@/components/ExternalLink';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+type StockItem = {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+};
 
-export default function TabTwoScreen() {
+const MOCK_STOCKS: StockItem[] = [
+  { symbol: 'AAPL', name: 'Apple Inc.', price: 195.32, change: +1.23 },
+  { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 2780.44, change: -15.62 },
+  { symbol: 'TSLA', name: 'Tesla Inc.', price: 880.56, change: +4.10 },
+  { symbol: 'AMZN', name: 'Amazon.com Inc.', price: 3300.21, change: -22.18 },
+];
+
+export default function ExploreScreen() {
+  const [stocks, setStocks] = useState<StockItem[]>(MOCK_STOCKS);
+
+  const renderItem = ({ item }: { item: StockItem }) => (
+    <TouchableOpacity style={styles.card}>
+      <View style={styles.stockHeader}>
+        <Text style={styles.symbol}>{item.symbol}</Text>
+        <Text style={[styles.change, { color: item.change >= 0 ? '#4caf50' : '#f44336' }]}>
+          {item.change >= 0 ? '+' : ''}
+          {item.change.toFixed(2)}
+        </Text>
+      </View>
+      <Text style={styles.name}>{item.name}</Text>
+      <Text style={styles.price}>${item.price.toFixed(2)}</Text>
+    </TouchableOpacity>
+  );
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Explore</ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image source={require('@/assets/images/react-logo.png')} style={{ alignSelf: 'center' }} />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Custom fonts">
-        <ThemedText>
-          Open <ThemedText type="defaultSemiBold">app/_layout.tsx</ThemedText> to see how to load{' '}
-          <ThemedText style={{ fontFamily: 'SpaceMono' }}>
-            custom fonts such as this one.
-          </ThemedText>
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/versions/latest/sdk/font">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful <ThemedText type="defaultSemiBold">react-native-reanimated</ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      <Text style={styles.title}>Explore Popular Stocks</Text>
+      <FlatList
+        data={stocks}
+        renderItem={renderItem}
+        keyExtractor={(item) => item.symbol}
+        contentContainerStyle={{ paddingBottom: 20 }}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
+  container: {
+    backgroundColor: '#000',
+    flex: 1,
+    paddingTop: 60,
+    paddingHorizontal: 20,
   },
-  titleContainer: {
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#00ccff',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  card: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  stockHeader: {
     flexDirection: 'row',
-    gap: 8,
+    justifyContent: 'space-between',
+  },
+  symbol: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  name: {
+    fontSize: 14,
+    color: '#aaa',
+    marginTop: 4,
+  },
+  price: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 8,
+  },
+  change: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

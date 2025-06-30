@@ -1,47 +1,71 @@
-import { View, Text, Button, StyleSheet, useColorScheme} from 'react-native';
+import { View, Text, StyleSheet, Button, ScrollView } from 'react-native';
 import { Link } from 'expo-router';
 
 export default function HomeScreen() {
-  const colorScheme = useColorScheme();
-  const darkMode = colorScheme === "dark";
-
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      padding: 24,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: darkMode ? '#000' : '#fff',
-    },
-    title: {
-      fontSize: 28,
-      fontWeight: 'bold',
-      marginBottom: 12,
-      textAlign: 'center',
-      color: darkMode ? '#fff' : '#000',
-    },
-    subtitle: {
-      fontSize: 16,
-      marginBottom: 20,
-      textAlign: 'center',
-      color: darkMode ? '#aaa' : '#666',
-    },
-  });
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome to Predictify</Text>
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>📈 Welcome to Predictify</Text>
       <Text style={styles.subtitle}>
-        Your personal AI assistant for stock market insights.
+        Your AI-powered assistant for smarter investing.
       </Text>
 
-      <Link href="/predict" asChild>
-        <Button title="Start Predicting" />
-      </Link>
-    </View>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}> What can you do here?</Text>
+        <Text style={styles.text}>• Predict stock prices using AI</Text>
+        <Text style={styles.text}>• View confidence levels & trends</Text>
+        <Text style={styles.text}>• Track volatility & get insights</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}> Ready to go?</Text>
+        <Link href="/predict" asChild>
+          <Button title="Start Predicting" />
+        </Link>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}> Manage your account</Text>
+        <Link href="/profile" asChild>
+          <Button title="View Profile" />
+        </Link>
+      </View>
+    </ScrollView>
   );
 }
 
-
-
-
+const styles = StyleSheet.create({
+  container: {
+    flexGrow: 1,
+    padding: 24,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#00ccff',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#aaa',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  section: {
+    marginBottom: 28,
+    paddingHorizontal: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  text: {
+    color: '#ccc',
+    marginLeft: 10,
+    marginBottom: 4,
+  },
+});
