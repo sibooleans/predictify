@@ -10,9 +10,9 @@ type StockItem = {
 
 const MOCK_STOCKS: StockItem[] = [
   { symbol: 'AAPL', name: 'Apple Inc.', price: 195.32, change: +1.23 },
-  { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 2780.44, change: -15.62 },
-  { symbol: 'TSLA', name: 'Tesla Inc.', price: 880.56, change: +4.10 },
-  { symbol: 'AMZN', name: 'Amazon.com Inc.', price: 3300.21, change: -22.18 },
+  { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 178.27, change: -3.84 },
+  { symbol: 'TSLA', name: 'Tesla Inc.', price: 323.79, change: +4.10 },
+  { symbol: 'AMZN', name: 'Amazon.com Inc.', price: 223.30, change: -6.18 },
 ];
 
 export default function ExploreScreen() {
