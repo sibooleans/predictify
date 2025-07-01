@@ -1,28 +1,29 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
 
-type StockItem = {
+type Stock = {
   symbol: string;
   name: string;
   price: number;
   change: number;
 };
 
-const MOCK_STOCKS: StockItem[] = [
+const mockStocks: Stock[] = [
   { symbol: 'AAPL', name: 'Apple Inc.', price: 195.32, change: +1.23 },
   { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 178.27, change: -3.84 },
   { symbol: 'TSLA', name: 'Tesla Inc.', price: 323.79, change: +4.10 },
   { symbol: 'AMZN', name: 'Amazon.com Inc.', price: 223.30, change: -6.18 },
 ];
+//gotta replace this mockstocks with actual data. link to yahoo finance api
 
 export default function ExploreScreen() {
-  const [stocks, setStocks] = useState<StockItem[]>(MOCK_STOCKS);
+  const [stocks, setStocks] = useState<Stock[]>(mockStocks);
 
-  const renderItem = ({ item }: { item: StockItem }) => (
+  const renderItem = ({ item }: { item: Stock }) => (
     <TouchableOpacity style={styles.card}>
       <View style={styles.stockHeader}>
         <Text style={styles.symbol}>{item.symbol}</Text>
-        <Text style={[styles.change, { color: item.change >= 0 ? '#4caf50' : '#f44336' }]}>
+        <Text style={[styles.priceChange, { color: item.change >= 0 ? '#4caf50' : '#f44336' }]}>
           {item.change >= 0 ? '+' : ''}
           {item.change.toFixed(2)}
         </Text>
@@ -85,7 +86,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: 8,
   },
-  change: {
+  priceChange: {
     fontSize: 16,
     fontWeight: '500',
   },

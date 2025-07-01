@@ -43,3 +43,6 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+//not changed from default, works so far.
+//gotta change icons for the little tabs at the bottom, follow the default coding for explore and home page.

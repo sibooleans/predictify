@@ -10,12 +10,12 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const router = useRouter(); 
 
-    const handleLogin = async () => {
+    const login = async () => {
         if (!email || !password) {
             Alert.alert('Missing info', 'Please enter both email and password.');
             return;
         }
-
+        //shud this be Alert.alert? seems a bit weird but it works. maybe the msg itself not needed.
         try {
             await signInWithEmailAndPassword(auth, email, password);
             Alert.alert('Welcome back!', 'Login successful.');
@@ -27,11 +27,11 @@ export default function Login() {
             Alert.alert('Login Failed', error.message);
         }
     };
-
+     //in the future shud implement a username system maybe.
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Login</Text>
-
+            
             <TextInput
             placeholder="Email"
             autoCapitalize="none"
@@ -47,7 +47,7 @@ export default function Login() {
             style={styles.input}
             />
 
-            <Button title="Log In" onPress={handleLogin} />
+            <Button title="Log In" onPress={login} />
 
             <Link href="/authent/signup">
                 <Text style={styles.link}>Don’t have an account? Sign up here</Text>

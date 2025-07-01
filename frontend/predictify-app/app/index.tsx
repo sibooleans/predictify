@@ -62,6 +62,8 @@ const styles = StyleSheet.create({
   result: { marginTop: 20 }
 });
 
+//this code is outdated and doesnt matter. just a fallback if cannot navigate to tabs.
+
 
 
 

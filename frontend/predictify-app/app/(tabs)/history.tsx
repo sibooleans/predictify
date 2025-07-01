@@ -19,6 +19,8 @@ export default function HistoryScreen() {
         .then(setHistory)
         .catch((err) => console.error('History fetch error:', err));
     };
+    //there seems to be a bit of delay from when i get prediction to it actually showing up on logs
+    //add refresh button if possible
 
     useEffect(() => {
         fetchHistory();
@@ -28,21 +30,23 @@ export default function HistoryScreen() {
         <ScrollView style={styles.container}>
             <Text style={styles.title}>Prediction History</Text>
 
-        <View style={styles.refreshWrapper}>
+        <View style={styles.refreshButton}>
             <Button title="Refresh" onPress={fetchHistory} />
         </View>
 
         {history.length === 0 ? (
             <Text style={styles.subtitle}>No predictions yet.</Text>
         ) : (
-            history.slice().reverse().map((item, index) => (
+            history.slice()
+            .reverse()
+            .map((item, index) => (
             <View key={index} style={styles.card}>
                 <Text style={styles.header}>
                     {item.stock} — {new Date(item.timestamp).toLocaleString()}
                 </Text>
                 <Text style={styles.text}>💵 ${item.predicted_price}</Text>
                 <Text style={styles.text}>📊 {item.confidence}%</Text>
-                <Text style={styles.text}>⚠️ {item.volatility}</Text>
+                <Text style={styles.text}>⚠️ {item.volatility}</Text> 
                 <Text style={styles.text}>📈 {item.trend}</Text>
             </View>
             ))
@@ -65,7 +69,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         textAlign: 'center',
     },
-    refreshWrapper: {
+    refreshButton: {
         marginBottom: 20,
         alignItems: 'center',
     },

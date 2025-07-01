@@ -14,10 +14,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# in-memory history store, will be updating this with calls
+# in-memory history store, will be updating this with calls eventuallly no time now
 history = []
 
-# response model for history (this the import from pydantic)
+#response model for history (this the import from pydantic)
 class Prediction(BaseModel):
     stock: str
     predicted_price: float

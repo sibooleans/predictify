@@ -4,14 +4,14 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import auth from '../../config/authentication';
 import { useRouter } from 'expo-router';
 
-export default function Signup() {
+export default function SignupScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const router = useRouter();
 
-    //make sure all 3 same
-    const handleCreateAccount = async () => {
+    //make sure all 3 filled
+    const createAccount = async () => {
         if (!email || !password || !confirmPassword) {
             Alert.alert('Missing Fields', 'Please fill in all fields.');
             return
@@ -38,7 +38,8 @@ export default function Signup() {
             //throw error if probs.
         }
     };
-    //formatting
+    //consider adjusting abit so keyboard dont cover when typing itself. rn the keyboard covers some fields 
+    //which could look a bit unprofesh?
     return (
     <View style={styles.container}>
         <Text style={styles.title}>Sign Up</Text>
@@ -65,7 +66,7 @@ export default function Signup() {
             style = {styles.input}
         />
 
-        <Button title="Create Account" onPress={handleCreateAccount} />
+        <Button title="Create Account" onPress={createAccount} />
     </View>
     );
 };

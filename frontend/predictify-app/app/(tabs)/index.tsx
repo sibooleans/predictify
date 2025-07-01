@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Button, ScrollView } from 'react-native';
 import { Link } from 'expo-router';
 
 export default function HomeScreen() {
+  //remember to replace the placeholder emoji with our actual logo
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>📈 Welcome to Predictify</Text>
@@ -18,7 +19,7 @@ export default function HomeScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}> Ready to go?</Text>
-        <Link href="/predict" asChild>
+        <Link href="/predict" asChild> 
           <Button title="Start Predicting" />
         </Link>
       </View>
@@ -32,6 +33,8 @@ export default function HomeScreen() {
     </ScrollView>
   );
 }
+
+//shud add more shortcuts to impt features. currently thinking mayb explore feature deserves one roo.
 
 const styles = StyleSheet.create({
   container: {
