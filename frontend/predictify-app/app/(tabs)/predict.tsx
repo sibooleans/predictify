@@ -20,7 +20,7 @@ export default function PredictScreen() {
     }
 
     try {
-      const response = await fetch(`http://192.168.88.7:8000/predict?stock=${stock}`);
+      const response = await fetch(`https://predictify-zcef.onrender.com/predict?stock=${stock}`);
       //got to switch this out to ngrok. figure out the debugging.
       //ngrok tunnel breaks aft 2 hrs??
       const data = await response.json();

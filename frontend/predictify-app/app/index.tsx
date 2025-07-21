@@ -16,7 +16,7 @@ export default function HomeScreen() {
 
   const getPrediction = async () => {
     try {
-      const response = await fetch(`http://192.168.10.105:8000/predict?stock=${stock}`);
+      const response = await fetch(`https://predictify-zcef.onrender.com/predict?stock=${stock}`);
       const data = await response.json();
       setResult(data);
     } catch (error) {
