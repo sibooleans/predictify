@@ -28,6 +28,7 @@ class Prediction(BaseModel):
 
 # predict endpoint
 @app.get("/predict")
+
 def predict(stock: str = "AAPL"):
     result = {
         "stock": stock,
@@ -40,7 +41,18 @@ def predict(stock: str = "AAPL"):
     history.append(result)
     return result
 
+@app.head("/predict")
+
+def head_predict(stock: str = "AAPL"):
+    return {}
+
 # history endpoint
 @app.get("/history", response_model=List[Prediction])
+
 def get_history():
     return history
+
+@app.head("/history")
+
+def head_history():
+    return {}
