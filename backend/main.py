@@ -56,3 +56,13 @@ def get_history():
 
 def head_history():
     return {}
+
+@app.get("/")
+
+def root():
+    return {"message": "Backend is running."}
+
+@app.head("/")
+
+def head_root():
+    return {}
