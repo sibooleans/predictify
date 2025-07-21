@@ -14,7 +14,7 @@ export default function HistoryScreen() {
     const [history, setHistory] = useState<Prediction[]>([]);
 
     const fetchHistory = () => {
-        fetch('https://predictify-zcef.onrender.com/predict/history')
+        fetch('https://predictify-zcef.onrender.com/history')
         .then((res) => res.json())
         .then(setHistory)
         .catch((err) => console.error('History fetch error:', err));
