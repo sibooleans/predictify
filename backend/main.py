@@ -8,6 +8,7 @@ from sklearn.linear_model import LinearRegression
 import requests
 import numpy as np
 import os
+import yfinance as yf
 
 app = FastAPI()
 
@@ -35,22 +36,16 @@ class Prediction(BaseModel):
 #helpers
 
 analyzer = SentimentIntensityAnalyzer()
-ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
 
 def fetch_historical_prices(symbol: str):
-    link = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
-    response = requests.get(link)
-    data = response.json()
-
-    print("RAW API RESPONSE:", data)
-
-    if "Time Series (Daily)" not in data:
+    #link = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
+    data = yf.download(symbol, period = "1mo")
+    if data.empty:
         return None
-    
-    time_series = data["Time Series (Daily)"]
-    dates = sorted(time_series.keys())[-30:] #data from lats month
-    prices = [float(time_series[date]["4. close"]) for date in dates]
-
+    prices = data["Close"].tolist()
+    if len(prices) < 2:
+        return None
+ 
     return np.array(range(len(prices))).reshape(-1, 1), np.array(prices).reshape(-1,1)
 
 def get_sentiment(symbol: str):
