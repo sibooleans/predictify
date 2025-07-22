@@ -78,7 +78,7 @@ def get_sentiment(symbol: str):
 def predict(stock: str = "AAPL"):
     result = {
         "stock": stock,
-        "predicted_price": None,
+        "predicted_price": 0.0,
         "confidence": 0,
         "volatility": "Unknown",
         "trend": "Unknown",
