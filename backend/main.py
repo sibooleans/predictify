@@ -41,6 +41,9 @@ def fetch_historical_prices(symbol: str):
     link = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
     response = requests.get(link)
     data = response.json()
+
+    print("RAW API RESPONSE:", data)
+
     if "Time Series (Daily)" not in data:
         return None
     
