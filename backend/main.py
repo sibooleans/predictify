@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 from pydantic import BaseModel
 import datetime
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from sklearn.linear_model import LinearRegression
+import requests
+import numpy as np
+import os
 
 app = FastAPI()
 
