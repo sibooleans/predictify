@@ -29,20 +29,83 @@ class Prediction(BaseModel):
     confidence: int
     volatility: str
     trend: str
+    sentiment: str
     timestamp: str
 
+#helpers
+
+analyzer = SentimentIntensityAnalyzer()
+ALPHA_VANTAGE_KEY = os.getenv("VNEGMVK1557V30EK")
+
+def fetch_historical_prices(symbol: str):
+    link = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
+    response = requests.get(link)
+    data = response.json()
+    if "Time Series (Daily)" not in data:
+        return None
+    
+    time_series = data["Time Series (Daily)"]
+    dates = sorted(time_series.key())[-30:] #data from lats month
+    prices = [float(time_series[date]["4. close"]) for date in dates]
+
+    return np.array(range(len(prices))).reshape(-1, 1), np.array(prices).reshape(-1,1)
+
+def get_sentiment(symbol: str):
+    #yet to use real tweets/reddit
+    mock_headlines = [
+        f"{symbol} shows strong growth potential!"
+        f"Mixed opinions on {symbol} stock today."
+        f"Investors worry about Q3 earnings for {symbol}"
+    ]
+
+    scores = [analyzer.polarity_scores(text)["compound"] 
+              for text in mock_headlines]
+    
+    avg = sum(scores) / len(scores)
+    if avg > 0.2:
+        return "Positive"
+    elif avg < -0.2:
+        return "Negative"
+    else:
+        return "Neutral"
+    
+
+    
+
 # predict endpoint
-@app.get("/predict")
+@app.get("/predict", response_model=Prediction)
 
 def predict(stock: str = "AAPL"):
     result = {
         "stock": stock,
-        "predicted_price": 153.20,
-        "confidence": 87,
-        "volatility": "Moderate",
-        "trend": "Strong Uptrend",
+        "predicted_price": None,
+        "confidence": 0,
+        "volatility": "Unknown",
+        "trend": "Unknown",
+        "sentiment": "Unknown",
         "timestamp": datetime.datetime.now().isoformat()
     }
+
+    try:
+        x, y = fetch_historical_prices(stock)
+        if x is None or y is None:
+            return {"error": "Invalid stock symbol or reached API limit."}
+
+        model = LinearRegression()
+        model.fit(x,y)
+        predicted = model.predict([[len(x)]])[0][0] 
+        r_squared = model.score(x, y)
+
+        result.update({
+            "predicted_price": float(predicted),
+            "confidence": int(r_squared * 100),
+            "volatility": "Moderate", #placeholder
+            "trend": "Uptrend" if predicted > y[-1] else "Downtrend",
+            "sentiment": get_sentiment(stock)
+        })
+    except Exception as e:
+        result["error"] = str(e)
+
     history.append(result)
     return result
 
