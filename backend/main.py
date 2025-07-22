@@ -35,7 +35,7 @@ class Prediction(BaseModel):
 #helpers
 
 analyzer = SentimentIntensityAnalyzer()
-ALPHA_VANTAGE_KEY = os.getenv("VNEGMVK1557V30EK")
+ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
 
 def fetch_historical_prices(symbol: str):
     link = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
