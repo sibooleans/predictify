@@ -45,7 +45,7 @@ def fetch_historical_prices(symbol: str):
         return None
     
     time_series = data["Time Series (Daily)"]
-    dates = sorted(time_series.key())[-30:] #data from lats month
+    dates = sorted(time_series.keys())[-30:] #data from lats month
     prices = [float(time_series[date]["4. close"]) for date in dates]
 
     return np.array(range(len(prices))).reshape(-1, 1), np.array(prices).reshape(-1,1)
