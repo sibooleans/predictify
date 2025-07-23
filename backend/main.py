@@ -41,14 +41,23 @@ def fetch_historical_prices(symbol: str):
     print(f"[DEBUG] Fetching prices for {symbol}")
     data = yf.download(symbol, period = "1mo")
     print(f"[DEBUG] Data fetched, empty={data.empty}")
-    if data.empty:
+
+    if data.empty or "Close" not in data.columns:
+        print(f"[ERROR] No data or 'Close' column missing for {symbol}")
         return None
+    
+    prices_series = data["Close"].dropna()
+    print(f"[DEBUG] Close prices:\n{prices_series}")
+    
     print("[DEBUG] About to extract Close prices")
-    prices = data["Close"].tolist()
+    prices = prices_series.tolist()
     print(f"[DEBUG] Prices: {prices}")
     print(f"[DEBUG] Length of prices: {len(prices)}")
     if len(prices) < 2:
+        print(f"[ERROR] Not enough data points after cleaning")
         return None
+    
+    print(f"[DEBUG] Final prices list: {prices}")
  
     return np.array(range(len(prices))).reshape(-1, 1), np.array(prices).reshape(-1, 1)
 
