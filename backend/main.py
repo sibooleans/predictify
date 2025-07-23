@@ -46,7 +46,7 @@ def fetch_historical_prices(symbol: str):
         print(f"[ERROR] No data or 'Close' column missing for {symbol}")
         return None
     
-    prices_series = data["Close"].dropna()
+    prices_series = data["Close"].squeeze().dropna()
     print(f"[DEBUG] Close prices:\n{prices_series}")
     
     print("[DEBUG] About to extract Close prices")
@@ -124,7 +124,7 @@ def predict(stock: str = "AAPL"):
         print("[DEBUG] Successfully updated result")
 
     except Exception as e:
-        print(f"[ERROR] Exception in prediction logic: {e}")
+        print(f"[ERROR] Exception in prediction logic: {e}") 
         result["error"] = str(e)
 
     history.append(result)
