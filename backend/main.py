@@ -88,11 +88,19 @@ def predict(stock: str = "AAPL"):
         x, y = fetch_historical_prices(stock)
         if x is None or y is None:
             return {"error": "Invalid stock symbol or reached API limit."}
+        
+        print(f"\n[DEBUG] Stock symbol: {stock}")
+        print(f"[DEBUG] x (days): {x.flatten()}")
+        print(f"[DEBUG] y (prices): {y.flatten()}")
 
         model = LinearRegression()
         model.fit(x,y)
         predicted = model.predict([[len(x)]])[0][0] 
         r_squared = model.score(x, y)
+
+        print(f"[DEBUG] Predicted price: {predicted}")
+        print(f"[DEBUG] Last actual price: {y[-1][0]}")
+        print(f"[DEBUG] R^2 Score: {r_squared}")
 
         result.update({
             "predicted_price": float(predicted),
