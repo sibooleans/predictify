@@ -38,11 +38,13 @@ class Prediction(BaseModel):
 analyzer = SentimentIntensityAnalyzer()
 
 def fetch_historical_prices(symbol: str):
-    #link = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
+    print(f"[DEBUG] Fetching prices for {symbol}")
     data = yf.download(symbol, period = "1mo")
+    print(f"[DEBUG] Data fetched, empty={data.empty}")
     if data.empty:
         return None
     prices = data["Close"].tolist()
+    print(f"[DEBUG] Prices: {prices}")
     if len(prices) < 2:
         return None
  
@@ -87,6 +89,7 @@ def predict(stock: str = "AAPL"):
     try:
         x, y = fetch_historical_prices(stock)
         if x is None or y is None:
+            print(f"[DEBUG] Exiting early — x or y is None. x={x}, y={y}")
             return {"error": "Invalid stock symbol or reached API limit."}
         
         print(f"\n[DEBUG] Stock symbol: {stock}")
