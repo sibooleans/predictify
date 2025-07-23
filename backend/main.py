@@ -45,10 +45,11 @@ def fetch_historical_prices(symbol: str):
         return None
     prices = data["Close"].tolist()
     print(f"[DEBUG] Prices: {prices}")
+    print(f"[DEBUG] Length of prices: {len(prices)}")
     if len(prices) < 2:
         return None
  
-    return np.array(range(len(prices))).reshape(-1, 1), np.array(prices).reshape(-1,1)
+    return np.array(range(len(prices))).reshape(-1, 1), np.array(prices).reshape(-1, 1)
 
 def get_sentiment(symbol: str):
     #yet to use real tweets/reddit
