@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
 import requests
 import numpy as np
 import os
@@ -37,36 +38,26 @@ class Prediction(BaseModel):
 
 analyzer = SentimentIntensityAnalyzer()
 
-def fetch_historical_prices(symbol: str):
-    print(f"[DEBUG] Fetching prices for {symbol}")
-    data = yf.download(symbol, period = "1mo")
-    print(f"[DEBUG] Data fetched, empty={data.empty}")
+def fetch_historical_prices(symbol: str, period: str):
+    data = yf.download(symbol, period = period)
 
     if data.empty or "Close" not in data.columns:
-        print(f"[ERROR] No data or 'Close' column missing for {symbol}")
         return None
     
     prices_series = data["Close"].squeeze().dropna()
-    print(f"[DEBUG] Close prices:\n{prices_series}")
-    
-    print("[DEBUG] About to extract Close prices")
     prices = prices_series.tolist()
-    print(f"[DEBUG] Prices: {prices}")
-    print(f"[DEBUG] Length of prices: {len(prices)}")
+
     if len(prices) < 2:
-        print(f"[ERROR] Not enough data points after cleaning")
         return None
-    
-    print(f"[DEBUG] Final prices list: {prices}")
  
     return np.array(range(len(prices))).reshape(-1, 1), np.array(prices).reshape(-1, 1)
 
 def get_sentiment(symbol: str):
     #yet to use real tweets/reddit
     mock_headlines = [
-        f"{symbol} shows strong growth potential!"
-        f"Mixed opinions on {symbol} stock today."
-        f"Investors worry about Q3 earnings for {symbol}"
+        f"{symbol} shows strong growth potential!",
+        f"Mixed opinions on {symbol} stock today.",
+        f"Investors worry about Q3 earnings for {symbol}",
     ]
 
     scores = [analyzer.polarity_scores(text)["compound"] 
@@ -80,13 +71,22 @@ def get_sentiment(symbol: str):
     else:
         return "Neutral"
     
+def determine_period(days_ahead: int):
+    if days_ahead <= 3:
+        return "1mo"
+    elif days_ahead <= 10:
+        return "3mo"
+    elif days_ahead <= 30:
+        return "6mo"
+    else:
+        return "1y"    
 
     
 
 # predict endpoint
 @app.get("/predict", response_model=Prediction)
 
-def predict(stock: str = "AAPL"):
+def predict(stock: str = "AAPL", days_ahead: int = 1):
     result = {
         "stock": stock,
         "predicted_price": 0.0,
@@ -98,21 +98,16 @@ def predict(stock: str = "AAPL"):
     }
 
     try:
-        X, y = fetch_historical_prices(stock)
-        if X is None or y is None:
-            print(f"[DEBUG] Exiting early — x or y is None. x={X}, y={y}")
+        history_period = determine_period(days_ahead)
+        x, y = fetch_historical_prices(stock, period=history_period)
+        if x is None or y is None:
             return {"error": "Invalid stock symbol or reached API limit."}
-        
-        print(f"[DEBUG] x: {X.flatten()}, y: {y.flatten()}")
 
-        model = LinearRegression()
-        model.fit(X,y)
-
-        predicted = model.predict([[len(X)]])[0][0] 
-        r_squared = model.score(X, y)
-
-        print(f"[DEBUG] Predicted: {predicted}, R^2: {r_squared}")
-
+        model = RandomForestRegressor(n_estimators=100)
+        model.fit(x, y.ravel())
+        future_day = len(x) + days_ahead - 1
+        predicted = model.predict([[future_day]])[0]
+        r_squared = model.score(x, y)
 
         result.update({
             "predicted_price": float(predicted),
@@ -121,10 +116,8 @@ def predict(stock: str = "AAPL"):
             "trend": "Uptrend" if predicted > y[-1] else "Downtrend",
             "sentiment": get_sentiment(stock)
         })
-        print("[DEBUG] Successfully updated result")
 
     except Exception as e:
-        print(f"[ERROR] Exception in prediction logic: {e}") 
         result["error"] = str(e)
 
     history.append(result)
