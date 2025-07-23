@@ -103,18 +103,16 @@ def predict(stock: str = "AAPL"):
             print(f"[DEBUG] Exiting early — x or y is None. x={X}, y={y}")
             return {"error": "Invalid stock symbol or reached API limit."}
         
-        print(f"\n[DEBUG] Stock symbol: {stock}")
-        print(f"[DEBUG] x (days): {X.flatten()}")
-        print(f"[DEBUG] y (prices): {y.flatten()}")
+        print(f"[DEBUG] x: {X.flatten()}, y: {y.flatten()}")
 
         model = LinearRegression()
         model.fit(X,y)
+
         predicted = model.predict([[len(X)]])[0][0] 
         r_squared = model.score(X, y)
 
-        print(f"[DEBUG] Predicted price: {predicted}")
-        print(f"[DEBUG] Last actual price: {y[-1][0]}")
-        print(f"[DEBUG] R^2 Score: {r_squared}")
+        print(f"[DEBUG] Predicted: {predicted}, R^2: {r_squared}")
+
 
         result.update({
             "predicted_price": float(predicted),
@@ -123,7 +121,10 @@ def predict(stock: str = "AAPL"):
             "trend": "Uptrend" if predicted > y[-1] else "Downtrend",
             "sentiment": get_sentiment(stock)
         })
+        print("[DEBUG] Successfully updated result")
+
     except Exception as e:
+        print(f"[ERROR] Exception in prediction logic: {e}")
         result["error"] = str(e)
 
     history.append(result)
