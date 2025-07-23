@@ -43,6 +43,7 @@ def fetch_historical_prices(symbol: str):
     print(f"[DEBUG] Data fetched, empty={data.empty}")
     if data.empty:
         return None
+    print("[DEBUG] About to extract Close prices")
     prices = data["Close"].tolist()
     print(f"[DEBUG] Prices: {prices}")
     print(f"[DEBUG] Length of prices: {len(prices)}")
@@ -88,19 +89,19 @@ def predict(stock: str = "AAPL"):
     }
 
     try:
-        x, y = fetch_historical_prices(stock)
-        if x is None or y is None:
-            print(f"[DEBUG] Exiting early — x or y is None. x={x}, y={y}")
+        X, y = fetch_historical_prices(stock)
+        if X is None or y is None:
+            print(f"[DEBUG] Exiting early — x or y is None. x={X}, y={y}")
             return {"error": "Invalid stock symbol or reached API limit."}
         
         print(f"\n[DEBUG] Stock symbol: {stock}")
-        print(f"[DEBUG] x (days): {x.flatten()}")
+        print(f"[DEBUG] x (days): {X.flatten()}")
         print(f"[DEBUG] y (prices): {y.flatten()}")
 
         model = LinearRegression()
-        model.fit(x,y)
-        predicted = model.predict([[len(x)]])[0][0] 
-        r_squared = model.score(x, y)
+        model.fit(X,y)
+        predicted = model.predict([[len(X)]])[0][0] 
+        r_squared = model.score(X, y)
 
         print(f"[DEBUG] Predicted price: {predicted}")
         print(f"[DEBUG] Last actual price: {y[-1][0]}")
