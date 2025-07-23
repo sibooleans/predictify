@@ -134,6 +134,7 @@ def head_history():
 @app.get("/")
 
 def root():
+    print("[DEBUG] Hello from updated root!")
     return {"message": "Backend is running."}
 
 @app.head("/")
