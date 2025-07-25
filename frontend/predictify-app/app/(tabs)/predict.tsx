@@ -12,7 +12,7 @@ import {
   Alert, 
   Dimensions
 } from 'react-native';
-import Slider from '@react-native-community/Slider';
+import Slider from '@react-native-community/slider';
 import { format, addDays } from 'date-fns';
 
 const { width } = Dimensions.get('window');
