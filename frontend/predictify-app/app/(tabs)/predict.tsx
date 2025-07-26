@@ -109,7 +109,7 @@ export default function PredictScreen() {
       }
 
       //making sure not imcomplete
-      if (!data.stock || data.predicted_price === undefined) {
+      if (!data.prediction || !data.prediction.stock || data.prediction.predicted_price === undefined) {
         Alert.alert("Data Error", "Invalid response from prediction service");
         return;
       }
