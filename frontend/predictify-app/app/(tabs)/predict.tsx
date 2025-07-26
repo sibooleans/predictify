@@ -49,11 +49,21 @@ type ChartInfo = {
   data_period: string;
 }
 
+type TradingInfo = {
+  trading_days_ahead: number;
+  calendar_days_ahead: number;
+  target_date: string;
+  target_date_formatted: string;
+  weekends_skipped: number;
+  is_trading_day_today: boolean;
+}
+
 type BackendResponse = {
   prediction: Prediction;
   historical_data: HistoricalData[];
   prediction_timeline: PredictionTimelinePoint[];
   chart_info: ChartInfo;
+  trading_info: TradingInfo;
 }
 
 export default function PredictScreen() {
@@ -181,7 +191,7 @@ export default function PredictScreen() {
     }
   };
 
-  const predictedDate = format(addDays(new Date(), daysAhead), 'PPP');
+  const predictedDate = result?.trading_info?.target_date_formatted || format(addDays(new Date(), daysAhead), 'PPP');
 
   const connectedTimelineData = () => {
     if (!result || !result?.historical_data || !result?.prediction_timeline) return null;

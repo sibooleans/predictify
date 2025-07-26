@@ -2,13 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any
 from pydantic import BaseModel
-import datetime
+from datetime import datetime, timedelta
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 import requests
 import numpy as np
+import pandas as pd
 import os
 import yfinance as yf
 
@@ -51,6 +52,61 @@ class PredictionResponse(BaseModel):
 #helpers
 
 analyzer = SentimentIntensityAnalyzer()
+
+# US Market Holidays for 2025 - Update yearly
+US_MARKET_HOLIDAYS_2025 = [
+    "2025-01-01",  
+    "2025-01-20",  
+    "2025-02-17",  
+    "2025-04-18",  
+    "2025-05-26",  
+    "2025-06-19",  
+    "2025-07-04",  
+    "2025-09-01",  
+    "2025-11-27",  
+    "2025-12-25",  
+]
+
+def is_trading_day(date):
+    if isinstance(date, str):
+        date = pd.to_datetime(date)
+    
+    # Check for weekend (Saturday=5, Sunday=6)
+    if date.weekday() >= 5:
+        return False
+    
+    # Check for holiday
+    date_str = date.strftime("%Y-%m-%d")
+    if date_str in US_MARKET_HOLIDAYS_2025:
+        return False
+    
+    return True
+
+def get_trading_date(start_date, trading_days_ahead):
+    current_date = pd.to_datetime(start_date)
+    trading_days_found = 0
+    
+    while trading_days_found < trading_days_ahead:
+        current_date += timedelta(days=1)
+        if is_trading_day(current_date):
+            trading_days_found += 1
+    
+    return current_date
+
+def get_trading_info(days_ahead):
+    today = datetime.now()
+    target_date = get_trading_date(today, days_ahead)
+    calendar_days = (target_date - today).days
+    
+    return {
+        "trading_days_ahead": days_ahead,
+        "calendar_days_ahead": calendar_days,
+        "target_date": target_date.strftime("%Y-%m-%d"),
+        "target_date_formatted": target_date.strftime("%B %d, %Y"),
+        "weekends_skipped": calendar_days - days_ahead,
+        "is_trading_day_today": is_trading_day(today)
+    }
+
 
 def fetch_historical_prices(symbol: str, period: str, days_ahead: int):
     #tackling both chart data and model data in this function
@@ -144,32 +200,45 @@ def stock_current_price(symbol: str):
         print(f"Error getting current price for {symbol}: {e}")
         return None
 
-def generate_pred_timeline(current_price: float, predicted_price: float, days_ahead: int,
-                           volatility: str):
+def generate_pred_timeline(current_price: float, predicted_price: float, 
+                           trading_days_ahead: int, volatility: str):
     #get data points
     timeline = []
 
     timeline.append({
         "day": 0,
         "price": current_price,
-        "label": "Today"
+        "label": "Today",
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "is_trading_day": True
     })
 
     price_change = predicted_price - current_price
 
     vol_factor = {
-        "Low": 0.01,      # 1% daily variation
-        "Moderate": 0.02, # 2% daily variation  
-        "High": 0.04      # 4% daily variation
-    }.get(volatility, 0.02)
+        "Low": 0.003,      # 1% daily variation
+        "Moderate": 0.006, # 2% daily variation  
+        "High": 0.012       # 4% daily variation
+    }.get(volatility, 0.006)
 
-    for day in range(1, days_ahead + 1):
+    current_date = datetime.now()
+    trading_days_counted = 0
+    calendar_days_checked = 0
+
+    while trading_days_counted < trading_days_ahead and calendar_days_checked < trading_days_ahead * 3:
+        calendar_days_checked += 1
+        current_date += timedelta(days=1)
+        
+        if is_trading_day(current_date):
+            trading_days_counted += 1
+
         # linear progress         
-        progress = day / days_ahead
+        progress = trading_days_counted / trading_days_ahead
         base_price = current_price + (price_change * progress)
         
          # market noise based on volatility
         daily_variation = np.random.normal(0, current_price * vol_factor)
+        price_point = base_price + daily_variation
         
         # non negativity or not too high constraints
         price_point = max(current_price * 0.5, base_price + daily_variation)
@@ -177,12 +246,17 @@ def generate_pred_timeline(current_price: float, predicted_price: float, days_ah
 
 
         
-        label = f"+{day}d" if day % max(1, days_ahead // 5) == 0 or day == days_ahead else ""
+        if trading_days_counted % max(1, trading_days_ahead // 5) == 0 or trading_days_counted == trading_days_ahead:
+            label = f"+{trading_days_counted}d"
+        else:
+            label = ""
         
         timeline.append({
-            "day": day,
+            "day": trading_days_counted,
             "price": float(price_point),
-            "label": label
+            "label": label,
+            "date": current_date.strftime("%Y-%m-%d"),
+            "is_trading_day": True
         })
     
     return timeline
@@ -245,6 +319,8 @@ def determine_period(days_ahead: int):
 
 def predict(stock: str = "AAPL", days_ahead: int = 1):
     try:
+        trading_info = get_trading_info(days_ahead)
+
         history_period = determine_period(days_ahead)
         model_data, historical_data = fetch_historical_prices(stock,
             period = history_period, days_ahead = days_ahead)
@@ -317,7 +393,8 @@ def predict(stock: str = "AAPL", days_ahead: int = 1):
                 "title": chart_title(days_ahead),
                 "timeframe_days": chart_timeframe(days_ahead),
                 "data_period": history_period
-            }
+            },
+            "trading info": trading_info
         }
 
         history.append(result.model_dump())
