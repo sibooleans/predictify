@@ -567,7 +567,7 @@ def predict(stock: str = "AAPL", days_ahead: int = 1):
         predicted_price = prediction_result['predicted_price']
         confidence = prediction_result['confidence']    
         sentiment = get_sentiment(stock)
-        vol = obtain_volatility
+        vol = obtain_volatility(prices)
         
         result = Prediction(
             stock = stock.upper(),
