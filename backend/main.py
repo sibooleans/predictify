@@ -6,6 +6,7 @@ import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
 import requests
 import numpy as np
 import os
@@ -143,7 +144,8 @@ def stock_current_price(symbol: str):
         print(f"Error getting current price for {symbol}: {e}")
         return None
 
-def generate_pred_timeline(current_price: float, predicted_price: float, days_ahead: int):
+def generate_pred_timeline(current_price: float, predicted_price: float, days_ahead: int,
+                           volatility: str):
     #get data points
     timeline = []
 
@@ -155,14 +157,25 @@ def generate_pred_timeline(current_price: float, predicted_price: float, days_ah
 
     price_change = predicted_price - current_price
 
+    vol_factor = {
+        "Low": 0.01,      # 1% daily variation
+        "Moderate": 0.02, # 2% daily variation  
+        "High": 0.04      # 4% daily variation
+    }.get(volatility, 0.02)
+
     for day in range(1, days_ahead + 1):
-        # linear interpolation         
+        # linear progress         
         progress = day / days_ahead
-        interpolated_price = current_price + (price_change * progress)
+        base_price = current_price + (price_change * progress)
         
-        # realistif variation
-        variation = np.random.normal(0, abs(price_change) * 0.02)  
-        price_point = interpolated_price + variation
+         # market noise based on volatility
+        daily_variation = np.random.normal(0, current_price * vol_factor)
+        
+        # non negativity or not too high constraints
+        price_point = max(current_price * 0.5, base_price + daily_variation)
+        price_point = min(current_price * 2.0, price_point)  # capped at 2x current price
+
+
         
         label = f"+{day}d" if day % max(1, days_ahead // 5) == 0 or day == days_ahead else ""
         
@@ -242,20 +255,44 @@ def predict(stock: str = "AAPL", days_ahead: int = 1):
         
         x, y = model_data
 
+        if len(x) < 10: #min data
+            return {"error": "Insufficient historical data for prediction"}
+        
+        #split up data
+        X_train, X_test, y_train, y_test = train_test_split(
+            x, y.ravel(), test_size=0.2, shuffle=False, random_state=42
+        )
+        #Train model on training data
         model = RandomForestRegressor(n_estimators = 100, random_state = 42)
-        model.fit(x, y.ravel())
+        model.fit(X_train, y_train)
+
+        #confidence from text data
+        test_score = model.score(X_test, y_test)
+        #confidence capped from 30-85
+        confidence = max(30, min(85, int(test_score * 100)))
+
+        #prediction
         future_day = len(x) + days_ahead - 1
         predicted = model.predict([[future_day]])[0]
-        r_squared = model.score(x, y)
 
        #volatility
         prices = y.ravel().tolist()
         vol = obtain_volatility(prices)
 
+        #prediction bounds
+        current_price = current_price_data["current_price"]
+
+        #prediction limited to not too high changes
+        max_change = current_price * 0.20  # 20% max change
+        min_price = current_price - max_change
+        max_price = current_price + max_change
+
+        predicted = max(min_price, min(max_price, predicted))
+
         result = Prediction(
             stock = stock.upper(),
             predicted_price = float(predicted),
-            confidence = int(r_squared * 100),
+            confidence = confidence,
             volatility = vol,
             trend = "Uptrend" if predicted > current_price_data["current_price"] else "Downtrend",
             sentiment = get_sentiment(stock),
@@ -268,7 +305,8 @@ def predict(stock: str = "AAPL", days_ahead: int = 1):
         pred_timeline = generate_pred_timeline(
             current_price_data["current_price"], 
             float(predicted), 
-            days_ahead
+            days_ahead,
+            vol
         )
 
         api_response = {
