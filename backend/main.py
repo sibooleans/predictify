@@ -72,10 +72,16 @@ def fetch_historical_prices(symbol: str, period: str, days_ahead: int):
         chart_data = data.tail(chart_no_days)
 
         historical_data = []
-        for date, row in chart_data.iterrows():
+        for date in chart_data.index:
+            price_value = chart_data.loc[date, "Close"]
+            if hasattr(price_value, 'iloc'):
+                price = float(price_value.iloc[0])
+            else:
+                price = float(price_value)
+
             historical_data.append({
                 "date": date.strftime("%Y-%m-%d"),
-                "price": float(row["Close"])
+                "price": price
             })
             
         return (x, y), historical_data
