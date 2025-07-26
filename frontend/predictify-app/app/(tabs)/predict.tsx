@@ -15,6 +15,13 @@ import {
 import Slider from '@react-native-community/slider';
 import { format, addDays } from 'date-fns';
 import { LineChart, ProgressChart } from 'react-native-chart-kit'
+import { LogBox } from 'react-native';
+
+// Suppress known warnings from chart library
+LogBox.ignoreLogs([
+  '"shadow*" style props are deprecated',
+  'VirtualizedLists should never be nested',
+]);
 
 const { width } = Dimensions.get('window');
 const chartWidth = width - 40;
@@ -58,12 +65,26 @@ type TradingInfo = {
   is_trading_day_today: boolean;
 }
 
+type ModelInfo = {
+  model_name: string;
+  model_code: string;
+  algorithm: string;
+  description: string;
+  timeframe: string;
+  approach: string;
+  best_for: string;
+  confidence_range: string;
+  method_used?: string;
+  model_params?: string;
+}
+
 type BackendResponse = {
   prediction: Prediction;
   historical_data: HistoricalData[];
   prediction_timeline: PredictionTimelinePoint[];
   chart_info: ChartInfo;
   trading_info: TradingInfo;
+  model_info: ModelInfo;
 }
 
 export default function PredictScreen() {
@@ -191,7 +212,13 @@ export default function PredictScreen() {
     }
   };
 
-  const predictedDate = result?.trading_info?.target_date_formatted || format(addDays(new Date(), daysAhead), 'PPP');
+  const getApproximateTargetDate = (daysAhead: number) => {
+    const weekends = Math.floor(daysAhead / 5) * 2;
+    const approximateDays = daysAhead + weekends;
+    return format(addDays(new Date(), approximateDays), 'PPP');
+  };
+
+  const predictedDate = result?.trading_info?.target_date_formatted || getApproximateTargetDate(daysAhead);
 
   const connectedTimelineData = () => {
     if (!result || !result?.historical_data || !result?.prediction_timeline) return null;
@@ -279,6 +306,26 @@ export default function PredictScreen() {
     }
   };
 
+  const getModelDisplayInfo = (daysAhead: number, modelInfo?: ModelInfo) => {
+  if (daysAhead <= 7) {
+    return {
+      icon: '📈',
+      category: 'Short-term Analysis',
+      timeDescription: `${daysAhead} day${daysAhead > 1 ? 's' : ''} ahead`,
+      approach: 'Recent pattern analysis',
+      color: '#00ccff'
+    };
+  } else {
+    return {
+      icon: '🤖',
+      category: 'Long-term Forecasting', 
+      timeDescription: `${daysAhead} days ahead`,
+      approach: 'Historical pattern recognition',
+      color: '#4CAF50'
+    };
+  }
+};
+
 
   return (
   <ScrollView contentContainerStyle={styles.container}>
@@ -308,7 +355,7 @@ export default function PredictScreen() {
       {/*Days Ahead Slider - Decide 30 or 90*/}
       <View style={styles.inputGroup}>
         <Text style={styles.label}>
-          Prediction Timeline: {daysAhead} {daysAhead === 1 ? 'day' : 'days'}
+          Prediction Timeline: {daysAhead} {daysAhead === 1 ? 'trading day' : 'trading days'}
         </Text>
         <View style={styles.sliderContainer}>
           <Slider
@@ -323,8 +370,8 @@ export default function PredictScreen() {
             step={1}
           />
           <View style={styles.sliderLabels}>
-            <Text style={styles.sliderLabel}>1 day</Text>
-            <Text style={styles.sliderLabel}>90 days</Text>
+            <Text style={styles.sliderLabel}>1 trading day</Text>
+            <Text style={styles.sliderLabel}>90 trading days</Text>
           </View>
         </View>
         <Text style={styles.predictionDate}>Target Date: {predictedDate}</Text>
@@ -408,7 +455,9 @@ export default function PredictScreen() {
           {/*Connected Timeline Chart - Historical + Prediction*/}
           {connectedTimelineData() && (
             <View style={styles.chartCard}>
-              <Text style={styles.chartTitle}>📊 {result.chart_info.title} → Future Prediction</Text>
+              <Text style={styles.chartTitle}>
+                {getModelDisplayInfo(daysAhead).icon} {result.chart_info.title} → {result.model_info?.model_name || 'AI Prediction'}
+              </Text>
               <View style={styles.chartContainer}>
                 <LineChart
                   data={connectedTimelineData()!}
@@ -571,21 +620,47 @@ export default function PredictScreen() {
         {/*Model Information*/}
         <View style={styles.modelInfo}>
           <Text style={styles.modelTitle}>📋 Model Details</Text>
-          <View style={styles.modelDetails}>
-            <Text style={styles.modelText}>
-              • Algorithm: Random Forest Regression
-            </Text>
-            <Text style={styles.modelText}>
-              • Data Source: Historical price patterns (yfinance)
-            </Text>
-            <Text style={styles.modelText}>
-              • Analysis Period: {result.chart_info.data_period}
-            </Text>
-            <Text style={styles.modelText}>
-              • Generated: {new Date(result.prediction.timestamp).toLocaleString()}
-            </Text>
-          </View>
-        </View>
+          {result.model_info && (
+    <View style={styles.modelDetails}>
+      <View style={styles.modelHeader}>
+        <Text style={[styles.modelBadge, { backgroundColor: getModelDisplayInfo(daysAhead).color }]}>
+          {getModelDisplayInfo(daysAhead).icon} {getModelDisplayInfo(daysAhead).category}
+        </Text>
+      </View>
+      
+      <Text style={styles.modelText}>
+        • Algorithm: {result.model_info.algorithm}
+      </Text>
+      <Text style={styles.modelText}>
+        • Approach: {result.model_info.approach}
+      </Text>
+      <Text style={styles.modelText}>
+        • Timeframe: {result.model_info.timeframe}
+      </Text>
+      <Text style={styles.modelText}>
+        • Best for: {result.model_info.best_for}
+      </Text>
+      <Text style={styles.modelText}>
+        • Expected confidence: {result.model_info.confidence_range}
+      </Text>
+      {result.model_info.method_used && (
+        <Text style={styles.modelText}>
+          • Method used: {result.model_info.method_used}
+        </Text>
+      )}
+    </View>
+  )}
+  
+  <View style={styles.modelExplanation}>
+    <Text style={styles.explanationTitle}>Why this model?</Text>
+    <Text style={styles.explanationText}>
+      {daysAhead <= 7 
+        ? "For short-term predictions, we analyze recent price movements and patterns using time series analysis. This captures momentum and mean reversion effects that are most relevant for the next few days."
+        : "For longer-term predictions, we use machine learning to analyze months of historical data, identifying complex patterns and relationships that emerge over weeks and months."
+      }
+    </Text>
+  </View>
+</View>
 
         {/*Disclaimer*/}
         <View style={styles.disclaimer}>
@@ -912,6 +987,43 @@ const styles = StyleSheet.create({
   modelText: {
     color: '#ccc',
     fontSize: 14,
+  },
+
+  modelHeader: {
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+
+  modelBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    color: '#000',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+
+  modelExplanation: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#00ccff',
+  },
+
+  explanationTitle: {
+    color: '#00ccff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+
+  explanationText: {
+    color: '#ccc',
+    fontSize: 13,
+    lineHeight: 18,
   },
   disclaimer: {
     backgroundColor: '#1a1a1a',

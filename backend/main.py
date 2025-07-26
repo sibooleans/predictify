@@ -7,11 +7,14 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
+from statsmodels.tsa.arima.model import ARIMA
 import requests
 import numpy as np
 import pandas as pd
 import os
 import yfinance as yf
+import warnings
+warnings.filterwarnings('ignore')
 
 app = FastAPI()
 
@@ -312,13 +315,229 @@ def determine_period(days_ahead: int):
     else:
         return "1y"    
 
+#ARIMA Model
+
+def simple_arima_prediction(prices: list, days_ahead: int, current_price: float):
+    try:
+        # Convert to returns (more stable than raw prices)
+        returns = []
+        for i in range(1, len(prices)):
+            daily_return = (prices[i] - prices[i-1]) / prices[i-1]
+            returns.append(daily_return)
+        
+        # Use last 30 days of returns
+        recent_returns = returns[-30:] if len(returns) > 30 else returns
+        
+        if len(recent_returns) < 10:
+            # Fallback to average
+            avg_return = np.mean(recent_returns) if recent_returns else 0
+            predicted_price = current_price * (1 + avg_return * days_ahead * 0.1)
+            return {
+                'predicted_price': predicted_price,
+                'confidence': 45,
+                'method': 'simple_average_fallback',
+                'model_params': 'fallback'
+            }
+        
+        # simple ARIMA models
+        best_model = None
+        best_aic = float('inf')
+        best_params = None
+        
+        # simple combinations
+        simple_params = [(1,1,1), (2,1,1), (1,1,2), (2,1,2), (0,1,1)]
+        
+        for params in simple_params:
+            try:
+                model = ARIMA(recent_returns, order=params)
+                fitted = model.fit()
+                if fitted.aic < best_aic:
+                    best_aic = fitted.aic
+                    best_model = fitted
+                    best_params = params
+            except:
+                continue
+        
+        if best_model is None:
+            # fallback to moving average
+            avg_return = np.mean(recent_returns[-7:])  # last week
+            predicted_price = current_price * (1 + avg_return * days_ahead * 0.5)
+            return {
+                'predicted_price': predicted_price,
+                'confidence': 50,
+                'method': 'moving_average_fallback',
+                'model_params': 'ma_fallback'
+            }
+        
+        # prediction
+        forecast = best_model.forecast(steps=days_ahead)
+        
+        predicted_price = current_price
+        for return_pred in forecast:
+            predicted_price *= (1 + return_pred)
+        
+        # confidence
+        confidence = 60  # Base confidence
+        if best_aic < -50:
+            confidence += 10
+        if len(recent_returns) > 20:
+            confidence += 5
+        
+        # realistic constraints
+        max_change = 0.15 if days_ahead <= 3 else 0.25
+        min_price = current_price * (1 - max_change)
+        max_price = current_price * (1 + max_change)
+        predicted_price = max(min_price, min(max_price, predicted_price))
+        
+        return {
+            'predicted_price': predicted_price,
+            'confidence': min(75, confidence),
+            'method': 'ARIMA',
+            'model_params': best_params
+        }
+        
+    except Exception as e:
+        print(f"ARIMA error: {e}")
+        avg_return = np.mean(np.diff(prices[-10:]) / prices[-11:-1]) if len(prices) > 10 else 0
+        predicted_price = current_price * (1 + avg_return * days_ahead * 0.2)
+        return {
+            'predicted_price': predicted_price,
+            'confidence': 40,
+            'method': 'error_fallback',
+            'model_params': 'error'
+        }
     
+def random_forest_prediction(prices: list, days_ahead: int, current_price: float):
+    try:
+        if len(prices) < 30:
+            # no data for rf
+            trend = (prices[-1] - prices[0]) / len(prices) if len(prices) > 1 else 0
+            predicted_price = current_price + (trend * days_ahead)
+            return {
+                'predicted_price': predicted_price,
+                'confidence': 45,
+                'method': 'trend_extrapolation'
+            }
+            #pretty much the same method as under the predict function, just now moving it out.
+        #prepare features
+        X = []
+        y = []
+        
+        size = 20
+        for i in range(size, len(prices) - days_ahead):
+            window = prices[i-size:i]
+            
+            # Enhanced features
+            features = [
+                i,  # Time index
+                np.mean(window[-5:]),   
+                np.mean(window[-10:]), 
+                np.mean(window[-20:]),  
+                np.std(window),         # volatility
+                window[-1],             # current price
+                (window[-1] - window[0]) / window[0],  
+                (window[-1] - window[-5]) / window[-5] if len(window) >= 5 else 0,  
+                np.max(window) / np.min(window) if np.min(window) > 0 else 1,  
+            ]
+            X.append(features)
+            y.append(prices[i + days_ahead])
+        
+        if len(X) < 15:
+            # not enough training data
+            avg_return = np.mean(np.diff(prices) / prices[:-1])
+            predicted_price = current_price * (1 + avg_return * days_ahead * 0.1)
+            return {
+                'predicted_price': predicted_price,
+                'confidence': 40,
+                'method': 'insufficient_data'
+            }
+        
+        # training model
+        model = RandomForestRegressor(n_estimators=100, random_state=42, max_depth=15)
+        model.fit(X, y)
+        
+        # prediction
+        current_window = prices[-size:]
+        current_features = [
+            len(prices),
+            np.mean(current_window[-5:]),
+            np.mean(current_window[-10:]),
+            np.mean(current_window[-20:]),
+            np.std(current_window),
+            current_price,
+            (current_price - current_window[0]) / current_window[0],
+            (current_price - current_window[-5]) / current_window[-5] if len(current_window) >= 5 else 0,
+            np.max(current_window) / np.min(current_window) if np.min(current_window) > 0 else 1,
+        ]
+        
+        predicted_price = model.predict([current_features])[0]
+        
+        # confidence
+        score = model.score(X, y)
+        confidence = max(45, min(70, int(score * 85)))
+        
+        # constraints
+        max_change = 0.30  # 30% max for longer-term
+        min_price = current_price * (1 - max_change)
+        max_price = current_price * (1 + max_change)
+        predicted_price = max(min_price, min(max_price, predicted_price))
+        
+        return {
+            'predicted_price': predicted_price,
+            'confidence': confidence,
+            'method': 'RandomForest'
+        }
+        
+    except Exception as e:
+        print(f"Random Forest error: {e}")
+        # Trend fallback
+        if len(prices) > 5:
+            recent_trend = (prices[-1] - prices[-5]) / 5
+            predicted_price = current_price + (recent_trend * days_ahead)
+        else:
+            predicted_price = current_price
+        
+        return {
+            'predicted_price': predicted_price,
+            'confidence': 35,
+            'method': 'trend_fallback'
+        }
+
+def get_model_info(days_ahead: int):
+   #courtesy of frontend
+    if days_ahead <= 7:
+        return {
+            'model_name': 'Short-term Pattern Analysis',
+            'model_code': 'ARIMA-S',
+            'algorithm': 'ARIMA Time Series Analysis',
+            'description': 'Analyzes recent price movements and patterns',
+            'timeframe': '1-7 days',
+            'approach': 'Time series forecasting with autocorrelation analysis',
+            'best_for': 'Short-term predictions based on recent trends',
+            'confidence_range': '60-75%'
+        }
+    else:
+        return {
+            'model_name': 'Long-term Pattern Recognition',
+            'model_code': 'RF-L', 
+            'algorithm': 'Random Forest Machine Learning',
+            'description': 'Machine learning analysis of historical patterns',
+            'timeframe': '8+ days',
+            'approach': 'Ensemble learning with technical indicators',
+            'best_for': 'Longer predictions using historical data patterns',
+            'confidence_range': '55-70%'
+        }
 
 # predict endpoint
 @app.get("/predict")
 
 def predict(stock: str = "AAPL", days_ahead: int = 1):
     try:
+
+        stock = stock.upper() #so that even aapl becomes AAPL
+        if days_ahead < 1 or days_ahead > 90:
+            return {"error": "Days ahead must be between 1 and 90"}
+
         trading_info = get_trading_info(days_ahead)
 
         history_period = determine_period(days_ahead)
@@ -330,47 +549,32 @@ def predict(stock: str = "AAPL", days_ahead: int = 1):
             return {"error": "Invalid stock symbol or unable ot fetch data."}
         
         x, y = model_data
-
-        if len(x) < 10: #min data
-            return {"error": "Insufficient historical data for prediction"}
-        
-        #split up data
-        X_train, X_test, y_train, y_test = train_test_split(
-            x, y.ravel(), test_size=0.2, shuffle=False, random_state=42
-        )
-        #Train model on training data
-        model = RandomForestRegressor(n_estimators = 100, random_state = 42)
-        model.fit(X_train, y_train)
-
-        #confidence from text data
-        test_score = model.score(X_test, y_test)
-        #confidence capped from 30-85
-        confidence = max(30, min(85, int(test_score * 100)))
-
-        #prediction
-        future_day = len(x) + days_ahead - 1
-        predicted = model.predict([[future_day]])[0]
-
-       #volatility
         prices = y.ravel().tolist()
-        vol = obtain_volatility(prices)
-
-        #prediction bounds
         current_price = current_price_data["current_price"]
 
-        #prediction limited to not too high changes
-        max_change = current_price * 0.20  # 20% max change
-        min_price = current_price - max_change
-        max_price = current_price + max_change
+        if len(prices) < 10: #min data
+            return {"error": "Insufficient historical data for prediction"}
+        
+        if days_ahead <= 7:
+            # SHORT-TERM: Use ARIMA
+            prediction_result = simple_arima_prediction(prices, days_ahead, current_price)
+            model_info = get_model_info(days_ahead)
+        else:
+            # LONG-TERM: Use Random Forest
+            prediction_result =random_forest_prediction(prices, days_ahead, current_price)
+            model_info = get_model_info(days_ahead)
 
-        predicted = max(min_price, min(max_price, predicted))
-
+        predicted_price = prediction_result['predicted_price']
+        confidence = prediction_result['confidence']    
+        sentiment = sentiment(stock)
+        vol = obtain_volatility
+        
         result = Prediction(
             stock = stock.upper(),
-            predicted_price = float(predicted),
+            predicted_price = float(predicted_price),
             confidence = confidence,
             volatility = vol,
-            trend = "Uptrend" if predicted > current_price_data["current_price"] else "Downtrend",
+            trend = "Uptrend" if predicted_price > current_price_data["current_price"] else "Downtrend",
             sentiment = get_sentiment(stock),
             timestamp = datetime.now().isoformat(),
             current_price = current_price_data["current_price"],
@@ -380,7 +584,7 @@ def predict(stock: str = "AAPL", days_ahead: int = 1):
         #timeline
         pred_timeline = generate_pred_timeline(
             current_price_data["current_price"], 
-            float(predicted), 
+            float(predicted_price), 
             days_ahead,
             vol
         )
@@ -394,7 +598,12 @@ def predict(stock: str = "AAPL", days_ahead: int = 1):
                 "timeframe_days": chart_timeframe(days_ahead),
                 "data_period": history_period
             },
-            "trading info": trading_info
+            "trading info": trading_info,
+            "model_info": {
+                **model_info,
+                "method_used": prediction_result['method'],
+                "model_params": prediction_result.get('model_params', 'N/A')
+            }
         }
 
         history.append(result.model_dump())
