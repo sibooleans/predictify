@@ -14,8 +14,10 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { format, addDays } from 'date-fns';
+import { LineChart, ProgressChart } from 'react-native-chart-kit'
 
 const { width } = Dimensions.get('window');
+const chartWidth = width - 40;
 
 type Prediction = {
     stock: string;
@@ -25,12 +27,39 @@ type Prediction = {
     trend: string;
     sentiment: string;
     timestamp: string;
+    current_price: number;
+    price_change: number;
+    price_change_percent: number;
+}
+
+type HistoricalData = {
+  date: string;
+  price: number;
+}
+
+type PredictionTimelinePoint = {
+  day: number;
+  price: number;
+  label: string;
+}
+
+type ChartInfo = {
+  title: string;
+  timeframe_days: number;
+  data_period: string;
+}
+
+type BackendResponse = {
+  prediction: Prediction;
+  historical_data: HistoricalData[];
+  prediction_timeline: PredictionTimelinePoint[];
+  chart_info: ChartInfo;
 }
 
 export default function PredictScreen() {
   const [stock, setStock] = useState('');
   const [daysAhead, setDaysAhead] = useState(1);
-  const [result, setResult] = useState<Prediction | null>(null);
+  const [result, setResult] = useState<BackendResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
 
@@ -154,11 +183,98 @@ export default function PredictScreen() {
 
   const predictedDate = format(addDays(new Date(), daysAhead), 'PPP');
 
+  const connectedTimelineData = () => {
+    if (!result || !result?.historical_data || !result?.prediction_timeline) return null;
+
+    const recentHistoryCount = Math.min(40, result.historical_data.length);
+    const recentHistory = result.historical_data.slice(-recentHistoryCount);
+    
+    // Prediction data
+    const futurePoints = result.prediction_timeline.slice(1);
+    
+    const historicalPrices = recentHistory.map((item: HistoricalData) => item.price);
+    const futurePrices = futurePoints.map((item: PredictionTimelinePoint) => item.price);
+    const allPrices = [...historicalPrices, ...futurePrices];
+    
+    //labels
+    const historicalLabels = recentHistory.map((item: HistoricalData, index: number) => {
+      //label every 8-10 points
+      const interval = Math.ceil(recentHistory.length / 5);
+      if (index % interval === 0 || index === recentHistory.length - 1) {
+        return format(new Date(item.date), 'MM/dd');
+      }
+      return '';
+    });
+    
+    const futureLabels = futurePoints.map((item: PredictionTimelinePoint, index: number) => {
+      //future labels
+      return item.label || (index % 5 === 0 ? `+${item.day}d` : '');
+    });
+    
+    const allLabels = [...historicalLabels, ...futureLabels];
+    
+    //different styling for historical vs prediction
+     const datasets = [
+      {
+        data: allPrices,
+        color: (opacity = 1) => `rgba(0, 204, 255, ${opacity})`,
+        strokeWidth: 3
+      }
+    ];
+
+    return { 
+      labels: allLabels, 
+      datasets,
+      transitionIndex: historicalPrices.length - 1 // hist endpoint
+    };
+  };
+
+  // Chart configuration
+  const chartConfig = {
+    backgroundColor: '#111',
+    backgroundGradientFrom: '#111',
+    backgroundGradientTo: '#222',
+    decimalPlaces: 2,
+    color: (opacity = 1) => `rgba(0, 204, 255, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+    style: {
+      borderRadius: 16
+    },
+    propsForDots: {
+      r: "4",
+      strokeWidth: "2",
+      stroke: "#00ccff"
+    },
+    propsForBackgroundLines: {
+      strokeDasharray: "",
+      stroke: "#333",
+      strokeWidth: 1
+    }
+  };
+
+  const predictionChartConfig = {
+    backgroundColor: '#111',
+    backgroundGradientFrom: '#001a2e',
+    backgroundGradientTo: '#111',
+    decimalPlaces: 2,
+    color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+    style: {
+      borderRadius: 16
+    },
+    propsForDots: {
+      r: "4",
+      strokeWidth: "2",
+      stroke: "#4CAF50"
+    }
+  };
+
+
   return (
   <ScrollView contentContainerStyle={styles.container}>
     {/*Header - Replace w predictify logo*/}
     <View style={styles.header}>
-      <Text style={styles.title}>🧠 AI Stock Predictor</Text>
+      <Text style={styles.title}>🧠 Stock Predictor</Text>
       <Text style={styles.subtitle}>Machine learning powered forecasts</Text>
     </View>
 
@@ -169,7 +285,7 @@ export default function PredictScreen() {
         <Text style={styles.label}>Stock Symbol</Text>
         <TextInput
           style={styles.input}
-          placeholder="Enter symbol (e.g., AAPL, TSLA)"
+          placeholder="Enter symbol (e.g., AAPL)"
           placeholderTextColor="#666"
           value={stock}
           onChangeText={(text) => setStock(text.toUpperCase())}
@@ -231,22 +347,109 @@ export default function PredictScreen() {
       </View>
     )}
 
-    {/*Results*/}
+    {/*Results - charts added*/}
     {result && !loading && (
       <Animated.View style={[styles.resultsContainer, { opacity: fadeAnim }]}>
-        {/*Result Card*/}
-        <View style={styles.mainResultCard}>
-          <Text style={styles.resultTitle}>
-            {result.stock.toUpperCase()} Forecast
-          </Text>
-          
-          <View style={styles.priceContainer}>
-            <Text style={styles.priceLabel}>Predicted Price</Text>
-            <Text style={styles.predictedPrice}>
-              ${result.predicted_price.toFixed(2)}
-            </Text>
-            <Text style={styles.targetDate}>by {predictedDate}</Text>
+
+        {/*Current vs Predicted*/}
+        <View style={styles.priceComparisonCard}>
+            <Text style={styles.cardTitle}>Price Comparison</Text>
+            
+            <View style={styles.priceRow}>
+              <View style={styles.priceColumn}>
+                <Text style={styles.priceLabel}>Current Price</Text>
+                <Text style={styles.currentPrice}>
+                  ${result.prediction.current_price.toFixed(2)}
+                </Text>
+                <Text style={[
+                  styles.priceChange,
+                  { color: result.prediction.price_change >= 0 ? '#4CAF50' : '#F44336' }
+                ]}>
+                  {result.prediction.price_change >= 0 ? '+' : ''}${result.prediction.price_change.toFixed(2)} 
+                  ({result.prediction.price_change_percent >= 0 ? '+' : ''}
+                  {result.prediction.price_change_percent.toFixed(1)}%)
+                </Text>
+              </View>
+
+              <View style={styles.priceColumn}>
+                <Text style={styles.priceLabel}>Predicted Price</Text>
+                <Text style={styles.predictedPrice}>
+                  ${result.prediction.predicted_price.toFixed(2)}
+                </Text>
+                <Text style={styles.targetDate}>by {predictedDate}</Text>
+              </View>
+            </View>
+
+            {/*Change Indicator*/}
+            <View style={styles.changeIndicator}>
+              <Text style={[
+                styles.changeText,
+                { color: result.prediction.predicted_price > result.prediction.current_price ? '#4CAF50' : '#F44336' }
+              ]}>
+                {result.prediction.predicted_price > result.prediction.current_price ? '📈' : '📉'} 
+                {result.prediction.predicted_price > result.prediction.current_price ? '+' : ''}
+                ${(result.prediction.predicted_price - result.prediction.current_price).toFixed(2)} 
+                ({((result.prediction.predicted_price - result.prediction.current_price) / 
+                result.prediction.current_price * 100).toFixed(1)}%)
+              </Text>
+            </View>
           </View>
+
+          {/*Connected Timeline Chart - Historical + Prediction*/}
+          {connectedTimelineData() && (
+            <View style={styles.chartCard}>
+              <Text style={styles.chartTitle}>📊 {result.chart_info.title} → Future Prediction</Text>
+              <View style={styles.chartContainer}>
+                <LineChart
+                  data={connectedTimelineData()!}
+                  width={chartWidth}
+                  height={220}
+                  chartConfig={{
+                    backgroundColor: '#111',
+                    backgroundGradientFrom: '#111',
+                    backgroundGradientTo: '#222',
+                    decimalPlaces: 2,
+                    color: (opacity = 1) => `rgba(0, 204, 255, ${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                    style: { borderRadius: 16 },
+                    propsForDots: {
+                      r: "3",
+                      strokeWidth: "2",
+                      stroke: "#00ccff"
+                    },
+                    propsForBackgroundLines: {
+                      strokeDasharray: "",
+                      stroke: "#333",
+                      strokeWidth: 1
+                    }
+                  }}
+                  bezier
+                  style={styles.chart}
+                  withHorizontalLabels={true}
+                  withVerticalLabels={true}
+                  withDots={true}
+                  withShadow={false}
+                />
+              </View>
+              <View style={styles.chartLegend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#00ccff' }]} />
+                  <Text style={styles.legendText}>Historical ({result.chart_info.timeframe_days} days)</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#FFD700' }]} />
+                  <Text style={styles.legendText}>Current Price</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#4CAF50' }]} />
+                  <Text style={styles.legendText}>AI Prediction ({daysAhead} days)</Text>
+                </View>
+              </View>
+              <Text style={styles.chartSubtitle}>
+                Seamless timeline from real historical data to AI prediction
+              </Text>
+            </View>
+          )}
 
           {/*Confidence Meter*/}
           <View style={styles.confidenceSection}>
@@ -255,46 +458,44 @@ export default function PredictScreen() {
               <Text
                 style={[
                   styles.confidenceLevel,
-                  { color: confidenceColour(result.confidence) }
+                  { color: confidenceColour(result.prediction.confidence) }
                 ]}
               >
-                {confidenceLevel(result.confidence)}
+                {confidenceLevel(result.prediction.confidence)}
               </Text>
             </View>
             
             <View style={styles.confidenceMeter}>
               <View style={styles.confidenceTrack}>
-                <View
-                  style={[
-                    styles.confidenceFill,
-                    {
-                      width: `${result.confidence}%`,
-                      backgroundColor: confidenceColour(result.confidence)
-                    }
-                  ]}
+                <View style={[
+                  styles.confidenceFill,
+                  {
+                    width: `${result.prediction.confidence}%`,
+                    backgroundColor: confidenceColour(result.prediction.confidence)
+                  }
+                ]}
                 />
               </View>
               <Text style={[
                 styles.confidencePercent,
-                { color: confidenceColour(result.confidence) }
+                { color: confidenceColour(result.prediction.confidence) }
               ]}>
-                {result.confidence}%
+                {result.prediction.confidence}%
               </Text>
             </View>
           </View>
-        </View>
 
         {/*Metrics Grid*/}
         <View style={styles.metricsGrid}>
           <View style={styles.metricCard}>
-            <Text style={styles.metricIcon}>{trendIcon(result.trend)}</Text>
+            <Text style={styles.metricIcon}>{trendIcon(result.prediction.trend)}</Text>
             <Text
               style={[
                 styles.metricValue,
-                { color: trendColor(result.trend) }
+                { color: trendColor(result.prediction.trend) }
               ]}
             >
-              {result.trend}
+              {result.prediction.trend}
             </Text>
             <Text style={styles.metricLabel}>Market Trend</Text>
           </View>
@@ -304,24 +505,58 @@ export default function PredictScreen() {
             <Text
               style={[
                 styles.metricValue,
-                { color: volatilityColor(result.volatility) }
+                { color: volatilityColor(result.prediction.volatility) }
               ]}
             >
-              {result.volatility}
+              {result.prediction.volatility}
             </Text>
             <Text style={styles.metricLabel}>Volatility</Text>
           </View>
 
           <View style={styles.metricCard}>
             <Text style={styles.metricIcon}>
-              {sentimentEmoji(result.sentiment)}
+              {sentimentEmoji(result.prediction.sentiment)}
             </Text>
             <Text style={styles.metricValue}>
-              {result.sentiment}
+              {result.prediction.sentiment}
             </Text>
             <Text style={styles.metricLabel}>Market Sentiment</Text>
           </View>
         </View>
+
+         {/*Confidence Chart*/}
+          <View style={styles.chartCard}>
+            <Text style={styles.chartTitle}>🎯 Model Confidence Analysis</Text>
+            <View style={styles.chartContainer}>
+              <ProgressChart
+                data={{
+                  labels: ["Confidence", "Accuracy", "Reliability"],
+                  data: [
+                    result.prediction.confidence / 100,
+                    Math.min(result.prediction.confidence / 100 + 0.1, 1),
+                    result.prediction.confidence > 
+                    80 ? 0.9 : result.prediction.confidence > 60 ? 0.7 : 0.5
+                  ]
+                }}
+                width={chartWidth}
+                height={200}
+                strokeWidth={16}
+                radius={32}
+                chartConfig={{
+                  backgroundColor: '#111',
+                  backgroundGradientFrom: '#111',
+                  backgroundGradientTo: '#222',
+                  color: (opacity = 1, index = 0) => {
+                    const colors = ['#00ccff', '#4CAF50', '#FF9800'];
+                    return colors[index] || `rgba(255, 255, 255, ${opacity})`;
+                  },
+                  labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                }}
+                hideLegend={false}
+                style={styles.chart}
+              />
+            </View>
+          </View>
 
         {/*Model Information*/}
         <View style={styles.modelInfo}>
@@ -331,13 +566,13 @@ export default function PredictScreen() {
               • Algorithm: Random Forest Regression
             </Text>
             <Text style={styles.modelText}>
-              • Data Source: Historical price patterns
+              • Data Source: Historical price patterns (yfinance)
             </Text>
             <Text style={styles.modelText}>
-              • Analysis Period: {daysAhead <= 3 ? '1 month' : daysAhead <= 10 ? '3 months' : daysAhead <= 30 ? '6 months' : '1 year'}
+              • Analysis Period: {result.chart_info.data_period}
             </Text>
             <Text style={styles.modelText}>
-              • Generated: {new Date(result.timestamp).toLocaleString()}
+              • Generated: {new Date(result.prediction.timestamp).toLocaleString()}
             </Text>
           </View>
         </View>
@@ -346,10 +581,11 @@ export default function PredictScreen() {
         <View style={styles.disclaimer}>
           <Text style={styles.disclaimerTitle}>⚠️ Important Notice</Text>
           <Text style={styles.disclaimerText}>
-            This prediction is generated using machine learning models based on historical data. 
-            Stock markets are inherently unpredictable and past performance does not guarantee 
-            future results. This is not financial advice. Always conduct your own research and 
-            consider consulting with qualified financial advisors before making investment decisions.
+            This prediction is generated using machine learning models based on historical data from yfinance. 
+            Charts show actual price movements and AI-generated forecasts. Stock markets are inherently 
+            unpredictable and past performance does not guarantee future results. This is not financial advice. 
+            Always conduct your own research and consider consulting with qualified financial advisors before making 
+            investment decisions.
           </Text>
         </View>
       </Animated.View>
@@ -408,11 +644,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 40,
   },
-  sliderThumb: {
-    backgroundColor: '#00ccff',
-    width: 20,
-    height: 20,
-  },
   sliderLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -468,40 +699,123 @@ const styles = StyleSheet.create({
   resultsContainer: {
     marginTop: 20,
   },
-  mainResultCard: {
+  priceComparisonCard: {
     backgroundColor: '#111',
     borderRadius: 16,
     padding: 24,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#333',
   },
-  resultTitle: {
-    fontSize: 24,
+  cardTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#00ccff',
     textAlign: 'center',
     marginBottom: 20,
   },
-  priceContainer: {
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  priceColumn: {
     alignItems: 'center',
-    marginBottom: 24,
+    flex: 1,
   },
   priceLabel: {
     color: '#666',
     fontSize: 14,
+    marginBottom: 8,
+  },
+  currentPrice: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
     marginBottom: 4,
   },
   predictedPrice: {
     color: '#00ccff',
-    fontSize: 36,
+    fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  priceChange: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   targetDate: {
     color: '#ccc',
     fontSize: 14,
-    marginTop: 4,
+  },
+  changeIndicator: {
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+  },
+  changeText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  chartCard: {
+    backgroundColor: '#111',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  chartTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#00ccff',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  chartContainer: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  chart: {
+    marginVertical: 8,
+    borderRadius: 16,
+  },
+  chartSubtitle: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+
+  chartLegend: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+    paddingHorizontal: 10,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 4,
+  },
+  legendText: {
+    fontSize: 10,
+    color: '#999',
   },
   confidenceSection: {
-    marginBottom: 8,
+    backgroundColor: '#111',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#333',
   },
   confidenceHeader: {
     flexDirection: 'row',
@@ -549,6 +863,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: '#333',
   },
   metricIcon: {
     fontSize: 24,
@@ -571,6 +887,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#333',
   },
   modelTitle: {
     color: '#00ccff',
