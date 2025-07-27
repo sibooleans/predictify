@@ -20,39 +20,10 @@ export default function Login() {
         }
 
         setLoading(true);
-        //shud this be Alert.alert? seems a bit weird but it works. maybe the msg itself not needed.
         try {
-            let emailToUse = loginField;
-        
-        // check for @ if not username - resolve it by match w email.
-            if (!loginField.includes('@')) {
-                try {
-                    const response = await fetch('https://predictify-zcef.onrender.com/resolve-login', { //maybe can import api?
-                        method: 'POST',
-                        headers: {
-                        'Content-Type': 'application/json',
-                        },
-                    body: JSON.stringify({ login_input: loginField })
-                });
-                
-                const result = await response.json();
-                
-                if (result.error) {
-                    Alert.alert('Login Failed', 'Username not found.');
-                    return;
-                }
-                
-                emailToUse = result.email;
-            } catch (resolveError) {
-                console.log('Username resolution failed:', resolveError);
-                // If username resolution fails, try original input as email
-            }
-        }
-        await signInWithEmailAndPassword(auth, emailToUse, password);
-        Alert.alert('Welcome back!', 'Login successful.');
-        router.replace('/(tabs)');
-
-            // still needa redirect to main screen
+            await signInWithEmailAndPassword(auth, loginField, password);
+            Alert.alert('Welcome back!', 'Login successful.');
+            router.replace('/(tabs)');
         } catch (error: any) {
             let errorMessage = "Login failed. Please try again.";
 
@@ -64,13 +35,11 @@ export default function Login() {
                 errorMessage = 'Please enter a valid email address.';
             } else if (error.code === 'auth/too-many-requests') {
                 errorMessage = 'Too many failed attempts. Please try again later.';
-            } else if (error.code === 'auth/network-request-failed') {
-                errorMessage = 'Network error. Please check your connection.';
             }
-      
+    
             Alert.alert('Login Failed', errorMessage);
         } finally {
-        setLoading(false);
+            setLoading(false);
         }
     };
      //in the future shud implement a username system maybe.implemented. can use either username or email.
@@ -90,7 +59,7 @@ export default function Login() {
         <View style={styles.inputContainer}>
           <Ionicons name="mail-outline" size={20} color="#666" />
           <TextInput
-            placeholder="Email or Username"
+            placeholder="Email"
             placeholderTextColor="#666"
             autoCapitalize="none"
             onChangeText={setLoginField}

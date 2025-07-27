@@ -133,11 +133,20 @@ class DatabaseManager:
                 return user['id']
             
             # creaying new user
-            cursor.execute(
-                """INSERT INTO users (firebase_uid, email, username) 
-                   VALUES (%s, %s, %s) RETURNING id""",
-                (firebase_uid, email, username)
-            )
+            if username:
+
+                cursor.execute(
+                    """INSERT INTO users (firebase_uid, email, username) 
+                    VALUES (%s, %s, %s) RETURNING id""",
+                    (firebase_uid, email, username)
+                )
+            else:
+                # Email-only user (current flow)
+                cursor.execute(
+                    """INSERT INTO users (firebase_uid, email) 
+                       VALUES (%s, %s) RETURNING id""",
+                    (firebase_uid, email)
+                )
             user_id = cursor.fetchone()['id']
             db_conn.commit()
             print(f"Created new user: {email} with username: {username}")
