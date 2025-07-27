@@ -27,6 +27,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Database initialization failed: {e}")
 
+@app.get("/setup-db")
+def setup_database():
+    try:
+        db_manager.create_tables()
+        return {"message": "Tables created successfully!"}
+    except Exception as e:
+        return {"error": f"Failed to create tables: {str(e)}"}
+
 @app.get("/")
 def root():
     print("[DEBUG] Hello from updated root!")

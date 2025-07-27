@@ -302,7 +302,8 @@ export default function HistoryScreen() {
         </View>
     );
 }
-        
+//maybe can try to experiment with colors not cyan and black, but i think stick with that gives a 
+//nice dark mode default vibe which is perfect
 const styles = StyleSheet.create({
     container: {
         flex: 1,
