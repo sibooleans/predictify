@@ -9,6 +9,8 @@ from config.database import db_manager
 import yfinance as yf
 import requests
 from datetime import datetime
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 app = FastAPI()
 
@@ -158,35 +160,37 @@ def get_user_stats(user_firebase_uid: str = Header(..., alias="X-User-UID")):
 
 #explore page related backend data
 
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Accept': 'application/json',
+    'Referer': 'https://finance.yahoo.com/'
+})
+
+# Add retry strategy
+retry_strategy = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+)
+adapter = HTTPAdapter(max_retries=retry_strategy)
+session.mount("http://", adapter)
+session.mount("https://", adapter)
+
 @app.get("/explore-stocks")
 def explore_data():
     try:
-        # Add debugging for the Yahoo API call
         trending_url = "https://query1.finance.yahoo.com/v1/finance/trending/US"
         
-        print(f"Making request to: {trending_url}")
-        response = requests.get(trending_url)
-        print(f"Response status: {response.status_code}")
-        print(f"Response length: {len(response.text)}")
-        print(f"First 200 chars: {response.text[:200]}")
+        # Use session instead of requests.get
+        response = session.get(trending_url, timeout=10)
         
-        # Check for empty response
-        if not response.text.strip():
-            print("Empty response from Yahoo API")
-            return {"error": "Empty response from trending API"}
+        print(f"Session request status: {response.status_code}")
         
-        # Try to parse JSON
-        try:
-            trending_data = response.json()
-        except Exception as json_error:
-            print(f"JSON parsing failed: {json_error}")
-            print(f"Raw response: {response.text[:500]}")
-            return {"error": "Invalid JSON from trending API"}
-
-        # Check if we got the expected structure
-        if 'finance' not in trending_data:
-            print(f"Unexpected response structure: {trending_data}")
-            return {"error": "Unexpected API response structure"}
+        if response.status_code != 200:
+            return {"error": f"API returned {response.status_code}"}
+            
+        trending_data = response.json()
 
         #filter out stock symbols
         stock_symbols = []
