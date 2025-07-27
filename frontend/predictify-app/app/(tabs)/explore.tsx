@@ -1,93 +1,365 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity,
+  ActivityIndicator, RefreshControl, ScrollView} from 'react-native';
 
 type Stock = {
   symbol: string;
   name: string;
   price: number;
   change: number;
+  changePercent: number;
+  volume?: number;
 };
 
-const mockStocks: Stock[] = [
-  { symbol: 'AAPL', name: 'Apple Inc.', price: 195.32, change: +1.23 },
-  { symbol: 'GOOGL', name: 'Alphabet Inc.', price: 178.27, change: -3.84 },
-  { symbol: 'TSLA', name: 'Tesla Inc.', price: 323.79, change: +4.10 },
-  { symbol: 'AMZN', name: 'Amazon.com Inc.', price: 223.30, change: -6.18 },
-];
-//gotta replace this mockstocks with actual data. link to yahoo finance api
+type SectorData = {
+  avg_change: number;
+  stock_count: number;
+  top_stocks: Stock[];
+};
 
 export default function ExploreScreen() {
-  const [stocks, setStocks] = useState<Stock[]>(mockStocks);
+  const [stockData, setStockData] = useState<any>({});
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [currentTab, setCurrentTab] = useState('trending');
 
-  const renderItem = ({ item }: { item: Stock }) => (
-    <TouchableOpacity style={styles.card}>
-      <View style={styles.stockHeader}>
-        <Text style={styles.symbol}>{item.symbol}</Text>
-        <Text style={[styles.priceChange, { color: item.change >= 0 ? '#4caf50' : '#f44336' }]}>
-          {item.change >= 0 ? '+' : ''}
-          {item.change.toFixed(2)}
+
+  const loadMarketData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('https://predictify-zcef.onrender.com/explore-stocks');
+      const data = await response.json();
+
+      if (data.error) {
+        console.log('API error:', data.error);
+        return;
+      }
+      
+      setStockData(data);
+    } catch (error) {
+      console.log('Network error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadMarketData();
+    setRefreshing(false);
+  };
+
+  useEffect(() => {
+    loadMarketData();
+  }, []);
+
+  const tabOptions = [
+    { id: 'trending', title: 'Trending', icon: '🔥' },
+    { id: 'gainers', title: 'Gainers', icon: '📈' },
+    { id: 'losers', title: 'Losers', icon: '📉' },
+    { id: 'sectors', title: 'Sectors', icon: '📂' },
+    { id: 'popular', title: 'Popular', icon: '⚡' }
+  ];
+
+  //formatting each stock - go red and green for %
+  const renderStockItem = ({ item }: { item: Stock }) => (
+    <TouchableOpacity style={styles.stockCard}>
+      <View style={styles.stockMainInfo}>
+        <Text style={styles.stockSymbol}>{item.symbol}</Text>
+        <Text style={styles.companyName}>{item.name}</Text>
+      </View>
+      
+      <View style={styles.stockPriceInfo}>
+        <Text style={styles.stockPrice}>${item.price.toFixed(2)}</Text>
+        <Text style={[
+          styles.stockChange,
+          { color: item.changePercent >= 0 ? '#4CAF50' : '#F44336' }
+        ]}>
+          {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
         </Text>
       </View>
-      <Text style={styles.name}>{item.name}</Text>
-      <Text style={styles.price}>${item.price.toFixed(2)}</Text>
     </TouchableOpacity>
   );
 
+  //format the sector part - stick w red n green again
+  const renderSectorItem = ({ item }: { item: [string, SectorData] }) => {
+    const [sectorName, sectorInfo] = item;
+    
+    return (
+      <View style={styles.sectorCard}>
+        <View style={styles.sectorHeader}>
+          <Text style={styles.sectorTitle}>{sectorName}</Text>
+          <View style={styles.sectorPerformance}>
+            <Text style={styles.sectorStockCount}>
+              {sectorInfo.stock_count} stocks
+            </Text>
+            <Text style={[
+              styles.sectorAvgChange,
+              { color: sectorInfo.avg_change >= 0 ? '#4CAF50' : '#F44336' }
+            ]}>
+              {sectorInfo.avg_change >= 0 ? '+' : ''}{sectorInfo.avg_change.toFixed(1)}%
+            </Text>
+          </View>
+        </View>
+        
+        <Text style={styles.sectorSubheading}>Top performers:</Text>
+        {sectorInfo.top_stocks.slice(0, 3).map((stock, idx) => (
+          <View key={stock.symbol} style={styles.sectorStockRow}>
+            <Text style={styles.sectorStockSymbol}>{stock.symbol}</Text>
+            <Text style={[
+              styles.sectorStockPerf,
+              { color: stock.changePercent >= 0 ? '#4CAF50' : '#F44336' }
+            ]}>
+              {stock.changePercent >= 0 ? '+' : ''}{stock.changePercent.toFixed(1)}%
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  if (loading) { //same as other loading screens.
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color="#00ccff" />
+        <Text style={styles.loadingMessage}>Loading market data...</Text>
+      </View>
+    );
+  }
+
+  //naviagate to tabs
+  const getCurrentTabData = () => {
+    if (currentTab === 'sectors') {
+      return Object.entries(stockData.sectors || {});
+    }
+    return stockData[currentTab] || [];
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Explore Popular Stocks</Text>
+      <Text style={styles.pageTitle}>Explore Markets</Text>
+      
+      {/* tab selection */}
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false} 
+        style={styles.tabScrollView}
+        contentContainerStyle={styles.tabContent}
+      >
+        {tabOptions.map((tab) => (
+          <TouchableOpacity
+            key={tab.id}
+            style={[
+              styles.tabButton,
+              currentTab === tab.id && styles.activeTabButton
+            ]}
+            onPress={() => setCurrentTab(tab.id)}
+          >
+            <Text style={styles.tabEmoji}>{tab.icon}</Text>
+            <Text style={[
+              styles.tabLabel,
+              currentTab === tab.id && styles.activeTabLabel
+            ]}>
+              {tab.title}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+    {/* main content list */}
+    {currentTab === 'sectors' ? (
       <FlatList
-        data={stocks}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.symbol}
-        contentContainerStyle={{ paddingBottom: 20 }}
-      />
+          data={Object.entries(stockData.sectors || {}) as [string, SectorData][]}
+          renderItem={renderSectorItem}
+          keyExtractor={(item) => item[0]}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={handleRefresh} 
+              tintColor="#00ccff" 
+            />
+          }
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+        />
+      ) : (
+        <FlatList
+          data={stockData[currentTab] as Stock[] || []}
+          renderItem={renderStockItem}
+          keyExtractor={(item) => item.symbol}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={handleRefresh} 
+              tintColor="#00ccff" 
+            />
+          }
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+        />
+      )}
     </View>
   );
-}
+} 
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#000',
     flex: 1,
+    backgroundColor: '#000',
     paddingTop: 60,
-    paddingHorizontal: 20,
   },
-  title: {
-    fontSize: 24,
+  loadingScreen: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  loadingMessage: {
+    color: '#00ccff',
+    marginTop: 15,
+    fontSize: 16,
+  },
+  pageTitle: {
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#00ccff',
-    marginBottom: 20,
     textAlign: 'center',
+    marginBottom: 25,
+    paddingHorizontal: 20,
   },
-  card: {
-    backgroundColor: '#1e1e1e',
+  tabScrollView: {
+    marginBottom: 20,
+    paddingLeft: 20,
+  },
+  tabContent: {
+    paddingRight: 20,
+  },
+  tabButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginRight: 12,
+    borderRadius: 20,
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  activeTabButton: {
+    backgroundColor: '#00ccff',
+    borderColor: '#00ccff',
+  },
+  tabEmoji: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  tabLabel: {
+    color: '#ccc',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activeTabLabel: {
+    color: '#000',
+  },
+  listContent: {
+    paddingBottom: 25,
+  },
+  stockCard: {
+    backgroundColor: '#111',
+    marginHorizontal: 20,
+    marginBottom: 14,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  stockHeader: {
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#333',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  symbol: {
+  stockMainInfo: {
+    flex: 1,
+  },
+  stockSymbol: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#ffffff',
+    color: '#fff',
+    marginBottom: 5,
   },
-  name: {
+  companyName: {
     fontSize: 14,
     color: '#aaa',
-    marginTop: 4,
   },
-  price: {
-    fontSize: 20,
-    fontWeight: '600',
+  stockPriceInfo: {
+    alignItems: 'flex-end',
+  },
+  stockPrice: {
+    fontSize: 18,
+    fontWeight: 'bold',
     color: '#fff',
-    marginTop: 8,
+    marginBottom: 5,
   },
-  priceChange: {
+  stockChange: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  sectorCard: {
+    backgroundColor: '#111',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 12,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  sectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 15,
+  },
+  sectorTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    flex: 1,
+  },
+  sectorPerformance: {
+    alignItems: 'flex-end',
+  },
+  sectorStockCount: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  sectorAvgChange: {
     fontSize: 16,
+    fontWeight: '600',
+  },
+  sectorSubheading: {
+    fontSize: 14,
+    color: '#aaa',
+    marginBottom: 10,
+  },
+  sectorStockRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+  },
+  sectorStockSymbol: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '500',
+  },
+  sectorStockPerf: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  emptyMessage: {
+    color: '#666',
+    fontSize: 16,
   },
 });

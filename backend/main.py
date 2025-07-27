@@ -6,6 +6,8 @@ from models.response_models import Prediction
 from services.prediction_service import predict as get_prediction
 from services.stock_service import get_historical_data
 from config.database import db_manager
+import yfinance as yf
+import requests
 
 app = FastAPI()
 
@@ -152,7 +154,95 @@ def get_user_stats(user_firebase_uid: str = Header(..., alias="X-User-UID")):
     except Exception as e:
         print(f"Statistics error: {e}")
         return {"error": f"Failed to fetch statistics: {str(e)}"}
-    
+
+#explore page related backend data
+
+@app.get("/explore-stocks")
+def explore_data():
+    try:
+        #get trending stocks from yfinance api internal endpoint
+        trending_url = "https://query1.finance.yahoo.com/v1/finance/trending/US"
+        response = requests.get(trending_url)
+        trending_data = response.json()
+
+        #filter out stock symbols
+        stock_symbols = []
+        for quote in trending_data['finance']['result'][0]['quotes'][:30]:
+            stock_symbols.append(quote['symbol'])
+        
+        all_stocks = []
+        sectors_dict = {}
+
+        for s in stock_symbols:
+            try:
+                ticker = yf.Ticker(s)
+                hist = ticker.history(period="2d")
+                info = ticker.info
+
+                if len(hist) < 2:
+                    continue
+
+                curr_price = float(hist['Close'].iloc[-1])
+                prev_price = float(hist['Close'].iloc[-2])
+                price_change = curr_price - prev_price
+                percent_change = (price_change / prev_price) * 100
+
+                stock_data = {
+                    'symbol': s,
+                    'name': info.get('shortName', s)[:28],  
+                    'price': curr_price,
+                    'change': price_change,
+                    'changePercent': percent_change,
+                    'volume': int(hist['Volume'].iloc[-1]) if len(hist) > 0 else 0
+                }
+
+                all_stocks.append(stock_data)
+
+                #secotr grping
+                sector = info.get('sector', 'Other')
+                if sector not in sectors_dict:
+                    sectors_dict[sector] = []
+                sectors_dict[sector].append(stock_data)
+            
+            except Exception as e: #for those stocks that cant load
+                print(f"Failed to get data for {s}: {e}")
+                continue    
+        #sort into the 4 cats for explore page, gainers, loser etc.
+        gainers_list = [stock for stock in all_stocks if stock['changePercent'] > 0]
+        gainers_list.sort(key=lambda x: x['changePercent'], reverse=True)
+        
+        losers_list = [stock for stock in all_stocks if stock['changePercent'] < 0]
+        losers_list.sort(key=lambda x: x['changePercent'])
+        
+        active_list = sorted(all_stocks, key=lambda x: x['volume'], reverse=True)
+        
+        sectors_data = {}
+        for sector_name, stocks in sectors_dict.items():
+            if len(stocks) >= 3:
+                total_change = sum(stock['changePercent'] for stock in stocks)
+                avg_change = total_change / len(stocks)
+                
+                top_performers = sorted(stocks, key=lambda x: x['changePercent'], reverse=True)
+                
+                sectors_data[sector_name] = {
+                    'avg_change': avg_change,
+                    'stock_count': len(stocks),
+                    'top_stocks': top_performers[:4]
+                }
+                
+        return {
+            'trending': all_stocks[:15],
+            'gainers': gainers_list[:12],
+            'losers': losers_list[:12],
+            'popular': active_list[:12],
+            'sectors': sectors_data
+        }   
+        
+    except Exception as e:
+        print(f"Explore data error: {e}")
+        return {"error": "Failed to fetch market data"}
+
+
 
  
     
