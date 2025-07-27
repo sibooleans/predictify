@@ -88,9 +88,12 @@ def check_username_availability(username: str):
         return {"error": f"Failed to check username: {str(e)}"}
 
 @app.post("/resolve-login")
-def resolve_login(login_input: str):
+def resolve_login(request: dict):
     #user to email
     try:
+        login_input = request.get('login_input')  # Extract from JSON 
+        if not login_input:
+            return {"error": "login_input is required"}
         # is it email?
         if '@' in login_input:
             return {"email": login_input, "type": "email"}
