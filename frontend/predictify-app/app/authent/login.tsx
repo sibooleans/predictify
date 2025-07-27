@@ -24,10 +24,10 @@ export default function Login() {
         try {
             let emailToUse = loginField;
         
-        // If input doesn't contain @, it might be a username - resolve it
+        // check for @ if not username - resolve it by match w email.
             if (!loginField.includes('@')) {
                 try {
-                    const response = await fetch('https://predictify-zcef.onrender.com/resolve-login', {
+                    const response = await fetch('https://predictify-zcef.onrender.com/resolve-login', { //maybe can import api?
                         method: 'POST',
                         headers: {
                         'Content-Type': 'application/json',

@@ -51,11 +51,14 @@ def add_username_support():
     
 @app.post("/save-username")
 def save_username(
-    username: str,
+    request: dict,
     user_firebase_uid: str = Header(..., alias="X-User-UID"),
     user_email: str = Header(..., alias="X-User-Email")
 ):
     try:
+        username = request.get('username')  #extract it from da dict
+        if not username:
+            return {"error": "Username is required"}
         # existing user check
         if db_manager.check_username_exists(username):
             return {"error": "Username already taken"}
@@ -240,7 +243,6 @@ session.headers.update({
     'Referer': 'https://finance.yahoo.com/'
 })
 
-# Add retry strategy
 retry_strategy = Retry(
     total=3,
     backoff_factor=1,
@@ -255,7 +257,7 @@ def explore_data():
     try:
         trending_url = "https://query1.finance.yahoo.com/v1/finance/trending/US"
         
-        # Use session instead of requests.get
+        # only using session instead of requests.get works
         response = session.get(trending_url, timeout=10)
         
         print(f"Session request status: {response.status_code}")
