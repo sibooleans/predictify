@@ -358,7 +358,7 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
             if len(recent_returns) >= 5:
                 try:
                     model = ARIMA(recent_returns, order=(1,1,1))
-                    fitted = model.fit(maxiter=30, method='css')
+                    fitted = model.fit()
                     forecast = fitted.forecast(steps=days_ahead)
                     
                     predicted_price = current_price
@@ -394,15 +394,14 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
         # ARIMA strats in order of likely sucess
         
         arima_strategies = [
-            # (p,d,q), max_time_seconds, method
-            ((1,1,1), 1.0, 'css'),      # Most common, fastest method
-            ((0,1,1), 1.0, 'css'),      # Simple MA model
-            ((1,1,0), 1.0, 'css'),      # Simple AR model
-            ((2,1,1), 1.5, 'css'),      # More complex
-            ((1,1,2), 1.5, 'css'),      # More complex
-            ((1,1,1), 2.0, 'lbfgs'),    # Retry with better method
-            ((0,1,1), 2.0, 'lbfgs'),    # Retry with better method
-            ((2,1,2), 3.0, 'lbfgs'),    # Most complex, more time
+            (1,1,1), # Most common, fastest method
+            (0,1,1), # Simple MA model
+            (1,1,0), # Simple AR model
+            (2,1,1), # More complex
+            (1,1,2), # More complex
+            (1,1,1), # Retry with better method
+            (0,1,1), # Retry with better method
+            (2,1,2), # Most complex, more time
             ]   
     
         best_model = None
@@ -423,21 +422,10 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
             
             try:
                 model = ARIMA(recent_returns, order=params)
-                
+            
                 # methof fitting and time limit
-                if method == 'css':
-                    fitted = model.fit(
-                        maxiter=20,
-                        method='css',
-                        disp=0
-                    )
-                else:  # lbfgs
-                    fitted = model.fit(
-                        maxiter=50,
-                        method='lbfgs',
-                        optim_score='approx',
-                        disp=0
-                    )
+                fitted = model.fit(disp=False)
+                
                 
                 fit_time = time.time() - start_time
                 total_time += fit_time
