@@ -135,7 +135,7 @@ class DatabaseManager:
             # creaying new user
             cursor.execute(
                 """INSERT INTO users (firebase_uid, email, username) 
-                   VALUES (%s, %s) RETURNING id""",
+                   VALUES (%s, %s, %s) RETURNING id""",
                 (firebase_uid, email, username)
             )
             user_id = cursor.fetchone()['id']

@@ -49,7 +49,7 @@ export default function Login() {
             }
         }
         await signInWithEmailAndPassword(auth, emailToUse, password);
-        Alert.alert("Welcome back!', 'Login successful.");
+        Alert.alert('Welcome back!', 'Login successful.');
         router.replace('/(tabs)');
 
             // still needa redirect to main screen
