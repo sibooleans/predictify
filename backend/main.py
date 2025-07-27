@@ -349,6 +349,42 @@ def explore_data():
         print(f"Explore data error: {e}")
         return {"error": "Failed to fetch market data"}
 
+@app.get("/debug/users")
+def debug_users():
+    """Debug endpoint to see users in database"""
+    try:
+        db_conn = db_manager.get_connection()
+        cursor = db_conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, firebase_uid, username, email, created_at 
+            FROM users 
+            ORDER BY created_at DESC 
+            LIMIT 10
+        """)
+        
+        users = cursor.fetchall()
+        cursor.close()
+        db_conn.close()
+        
+        # Convert to list of dicts for JSON response
+        users_list = []
+        for user in users:
+            users_list.append({
+                'id': user['id'],
+                'firebase_uid': user['firebase_uid'][:10] + '...',  # Truncate for privacy
+                'username': user['username'],
+                'email': user['email'],
+                'created_at': user['created_at'].isoformat() if user['created_at'] else None
+            })
+        
+        return {
+            'total_users': len(users_list),
+            'users': users_list
+        }
+        
+    except Exception as e:
+        return {"error": f"Failed to fetch users: {str(e)}"}
 
 
  
