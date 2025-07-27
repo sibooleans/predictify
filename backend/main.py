@@ -339,6 +339,8 @@ def stock_smart_constraint(historical_volatility: float, days_ahead: int):
     # final constraint
     final_max = min(max_change, absolute_max)
 
+    return final_max
+
 #ARIMA Model
 
 def simple_arima_prediction(prices: list, days_ahead: int, current_price: float):
@@ -350,105 +352,239 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
             returns.append(daily_return)
         
         # Use last 30 days of returns
-        recent_returns = returns[-30:] if len(returns) > 30 else returns
+        recent_returns = returns[-25:] if len(returns) > 25 else returns
         
         if len(recent_returns) < 10:
-            # Fallback to average
-            avg_return = np.mean(recent_returns) if recent_returns else 0
-            predicted_price = current_price * (1 + avg_return * days_ahead * 0.1)
-            return {
-                'predicted_price': predicted_price,
-                'confidence': 45,
-                'method': 'simple_average_fallback',
-                'model_params': 'fallback'
-            }
+            if len(recent_returns) >= 5:
+                try:
+                    model = ARIMA(recent_returns, order=(1,1,1))
+                    fitted = model.fit(maxiter=30, method='css')
+                    forecast = fitted.forecast(steps=days_ahead)
+                    
+                    predicted_price = current_price
+                    for return_pred in forecast:
+                        predicted_price *= (1 + return_pred)
+                    
+                    # Apply constraints
+                    max_change = 0.10 if days_ahead <= 3 else 0.15
+                    min_price = current_price * (1 - max_change)
+                    max_price = current_price * (1 + max_change)
+                    predicted_price = max(min_price, min(max_price, predicted_price))
+                    
+                    return {
+                        'predicted_price': predicted_price,
+                        'confidence': 55,
+                        'method': 'ARIMA_minimal_data',
+                        'model_params': (1,1,1)
+                    }
+                except:
+                    pass
+
+                #fallback when impossible.
+
+                avg_return = np.mean(recent_returns) if recent_returns else 0
+                predicted_price = current_price * (1 + avg_return * days_ahead * 0.1)
+                return {
+                    'predicted_price': predicted_price,
+                    'confidence': 40,
+                    'method': 'insufficient_data_fallback',
+                    'model_params': 'fallback'
+                }
         
-        # simple ARIMA models
-        fast_params = [
-            (1,1,1),  # Most common for daily stock returns
-            (0,1,1),  # Simple MA model
-            (1,1,0),  # Simple AR model  
-            (2,1,1),  # Slightly more complex
-            (1,1,2)   # Alternative complex
-        ]
+        # ARIMA strats in order of likely sucess
+        
+        arima_strategies = [
+            # (p,d,q), max_time_seconds, method
+            ((1,1,1), 1.0, 'css'),      # Most common, fastest method
+            ((0,1,1), 1.0, 'css'),      # Simple MA model
+            ((1,1,0), 1.0, 'css'),      # Simple AR model
+            ((2,1,1), 1.5, 'css'),      # More complex
+            ((1,1,2), 1.5, 'css'),      # More complex
+            ((1,1,1), 2.0, 'lbfgs'),    # Retry with better method
+            ((0,1,1), 2.0, 'lbfgs'),    # Retry with better method
+            ((2,1,2), 3.0, 'lbfgs'),    # Most complex, more time
+            ]   
     
         best_model = None
         best_aic = float('inf')
         best_params = None
+        total_time = 0
+        max_time = 4.5
         
         #attempt to fix issue that arima takes LOADS of time
         import time
-        start_time = time.time()
-        max_time = 3.0
         
-        for params in fast_params:
-            if time.time() - start_time > max_time:
-                print(f"ARIMA timeout after {max_time} seconds")
+        for params, time_limit, method in arima_strategies:
+            if total_time >= max_time:
+                print(f"ARIMA time budget exhausted: {total_time:.1f}s")
                 break
+            
+            start_time = time.time()
+            
             try:
                 model = ARIMA(recent_returns, order=params)
-                fitted = model.fit()
+                
+                # methof fitting and time limit
+                if method == 'css':
+                    fitted = model.fit(
+                        maxiter=20,
+                        method='css',
+                        disp=0
+                    )
+                else:  # lbfgs
+                    fitted = model.fit(
+                        maxiter=50,
+                        method='lbfgs',
+                        optim_score='approx',
+                        disp=0
+                    )
+                
+                fit_time = time.time() - start_time
+                total_time_used += fit_time
+                
+                # Check if this is the best model so far
                 if fitted.aic < best_aic:
                     best_aic = fitted.aic
                     best_model = fitted
                     best_params = params
+                    print(f"ARIMA{params} succeeded in {fit_time:.2f}s, AIC: {fitted.aic:.2f}")
+                
+                # decent model and are running out of time, stop
+                if best_aic < 0 and total_time_used > 3.0:
+                    print(f"Good ARIMA model found, stopping early at {total_time_used:.1f}s")
+                    break
+                    
             except Exception as e:
+                fit_time = time.time() - start_time
+                total_time_used += fit_time
+                print(f"ARIMA{params} failed in {fit_time:.2f}s: {str(e)[:50]}")
                 continue
         
-        if best_model is None:
-            # fallback to moving average
-            avg_return = np.mean(recent_returns[-7:])  # last week
-            predicted_price = current_price * (1 + avg_return * days_ahead * 0.5)
-
-            max_change = 0.10 if days_ahead <= 3 else 0.15
-            min_price = current_price * (1 - max_change)
-            max_price = current_price * (1 + max_change)
-            predicted_price = max(min_price, min(max_price, predicted_price))
+        # If we found a working ARIMA model, use it
+        if best_model is not None:
+            try:
+                print(f"Using ARIMA{best_params} with AIC {best_aic:.2f}")
+    
+                forecast = best_model.forecast(steps=days_ahead)
+                
+                # Convert returns back to price
+                predicted_price = current_price
+                for return_pred in forecast:
+                    predicted_price *= (1 + return_pred)
+                
+                # Calculate confidence based on model quality
+                confidence = 60 
+                if best_aic < -50:
+                    confidence += 15  # great model
+                elif best_aic < -20:
+                    confidence += 10  # good model
+                elif best_aic < 0:
+                    confidence += 5   # decent model
+                
+                if len(recent_returns) > 20:
+                    confidence += 5  # more data pts bonus
+                
+                # constraints
+                max_change = 0.12 if days_ahead <= 3 else 0.18
+                min_price = current_price * (1 - max_change)
+                max_price = current_price * (1 + max_change)
+                predicted_price = max(min_price, min(max_price, predicted_price))
+                
+                return {
+                    'predicted_price': predicted_price,
+                    'confidence': min(75, confidence),
+                    'method': 'ARIMA_success',
+                    'model_params': best_params,
+                    'aic': best_aic,
+                    'total_time': round(total_time_used, 2)
+                }
+                
+            except Exception as e:
+                print(f"ARIMA forecast failed: {e}")
+                # model fitted but forecast failed - use model's fitted values
+                try:
+                    # use model's trend for prediction
+                    fitted_values = best_model.fittedvalues
+                    if len(fitted_values) > 0:
+                        recent_trend = np.mean(fitted_values[-3:])
+                        predicted_price = current_price * (1 + recent_trend * days_ahead)
+                        
+                        max_change = 0.10
+                        min_price = current_price * (1 - max_change)
+                        max_price = current_price * (1 + max_change)
+                        predicted_price = max(min_price, min(max_price, predicted_price))
+                        
+                        return {
+                            'predicted_price': predicted_price,
+                            'confidence': 55,
+                            'method': 'ARIMA_fitted_trend',
+                            'model_params': best_params
+                        }
+                except:
+                    pass
+        # enhanced fallback in case of no model
+        if len(recent_returns) >= 5:
+            # Use multiple statistical approaches
+            approaches = []
             
-            return {
-                'predicted_price': predicted_price,
-                'confidence': 50,
-                'method': 'moving_average_fallback',
-                'model_params': 'ma_fallback'
-            }
+            # 1. exponential smoothing
+            alpha = 0.3
+            smoothed = recent_returns[0]
+            for ret in recent_returns[1:]:
+                smoothed = alpha * ret + (1 - alpha) * smoothed
+            approaches.append(smoothed)
+            
+            # 2. weighted recent average
+            weights = np.linspace(1, 3, len(recent_returns[-5:]))  
+            weights = weights / weights.sum()
+            weighted_avg = np.average(recent_returns[-5:], weights=weights)
+            approaches.append(weighted_avg)
+            
+            # 3. mean reversion consideration
+            last_return = recent_returns[-1]
+            vol = np.std(recent_returns)
+            if abs(last_return) > vol:  
+                mean_rev = -last_return * 0.2 
+            else:
+                mean_rev = np.mean(recent_returns[-3:])
+            approaches.append(mean_rev)
+            
+            # average the approaches
+            combined_signal = np.mean(approaches)
+            predicted_price = current_price * (1 + combined_signal * days_ahead * 0.4)
+        else:
+            # simple fallback
+            avg_return = np.mean(recent_returns)
+            predicted_price = current_price * (1 + avg_return * days_ahead * 0.2)
         
-        # prediction
-        forecast = best_model.forecast(steps=days_ahead)
-        
-        predicted_price = current_price
-        for return_pred in forecast:
-            predicted_price *= (1 + return_pred)
-        
-        # confidence
-        confidence = 60  # Base confidence
-        if best_aic < -50:
-            confidence += 10
-        if len(recent_returns) > 20:
-            confidence += 5
-        
-        # realistic constraints
-        max_change = 0.15 if days_ahead <= 3 else 0.25
+        # constraints
+        max_change = 0.08 if days_ahead <= 3 else 0.12
         min_price = current_price * (1 - max_change)
         max_price = current_price * (1 + max_change)
         predicted_price = max(min_price, min(max_price, predicted_price))
         
         return {
             'predicted_price': predicted_price,
-            'confidence': min(75, confidence),
-            'method': 'ARIMA',
-            'model_params': best_params
+            'confidence': 45,
+            'method': 'statistical_fallback_after_arima_failed',
+            'model_params': 'stat_fallback',
+            'arima_attempts': len(arima_strategies),
+            'total_time': round(total_time_used, 2)
         }
         
     except Exception as e:
-        print(f"ARIMA error: {e}")
-        avg_return = np.mean(np.diff(prices[-10:]) / prices[-11:-1]) if len(prices) > 10 else 0
-        predicted_price = current_price * (1 + avg_return * days_ahead * 0.2)
+        print(f"Complete ARIMA failure: {e}")
+        # emergency fallback
+        predicted_price = current_price * (1 + np.random.normal(0, 0.005))
         return {
             'predicted_price': predicted_price,
-            'confidence': 40,
-            'method': 'error_fallback',
-            'model_params': 'error'
+            'confidence': 35,
+            'method': 'emergency_fallback',
+            'model_params': 'emergency'
         }
+        
+       
+        
 
 def fallback_prediction(prices: list, days_ahead: int, current_price: float):
     #if random forest fails. fall back to a simple trend extrapolation.
