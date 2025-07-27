@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
         print("Database initialized successfully")
     except Exception as e:
         print(f"Database initialization failed: {e}")
+    yield
 
 @app.get("/setup-db")
 def setup_database():
@@ -228,7 +229,7 @@ def explore_data():
                 #secotr grping
                 sector = info.get('sector', 'Other')
                 print(f"{s}: sector = '{sector}'")
-                
+
                 if sector not in sectors_dict:
                     sectors_dict[sector] = []
                 sectors_dict[sector].append(stock_data)
@@ -247,7 +248,7 @@ def explore_data():
         
         sectors_data = {}
         for sector_name, stocks in sectors_dict.items():
-            if len(stocks) >= 3:
+            if len(stocks) >= 2:
                 total_change = sum(stock['changePercent'] for stock in stocks)
                 avg_change = total_change / len(stocks)
                 
