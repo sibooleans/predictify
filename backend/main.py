@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 from models.response_models import Prediction
-from services.prediction_service import prediction as get_prediction
+from services.prediction_service import predict as get_prediction
 from services.stock_service import get_historical_data
 
 app = FastAPI()
