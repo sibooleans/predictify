@@ -382,14 +382,14 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
 
                 #fallback when impossible.
 
-                avg_return = np.mean(recent_returns) if recent_returns else 0
-                predicted_price = current_price * (1 + avg_return * days_ahead * 0.1)
-                return {
-                    'predicted_price': predicted_price,
-                    'confidence': 40,
-                    'method': 'insufficient_data_fallback',
-                    'model_params': 'fallback'
-                }
+            avg_return = np.mean(recent_returns) if recent_returns else 0
+            predicted_price = current_price * (1 + avg_return * days_ahead * 0.1)
+            return {
+                'predicted_price': predicted_price,
+                'confidence': 40,
+                'method': 'insufficient_data_fallback',
+                'model_params': 'fallback'
+            }
         
         # ARIMA strats in order of likely sucess
         
@@ -413,7 +413,7 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
         #attempt to fix issue that arima takes LOADS of time
         import time
         
-        for params, time_limit, method in arima_strategies:
+        for params in arima_strategies:
             if total_time >= max_time:
                 print(f"ARIMA time budget exhausted: {total_time:.1f}s")
                 break
