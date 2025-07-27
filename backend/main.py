@@ -424,7 +424,7 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
                 model = ARIMA(recent_returns, order=params)
             
                 # methof fitting and time limit
-                fitted = model.fit(disp=False)
+                fitted = model.fit()
                 
                 
                 fit_time = time.time() - start_time
