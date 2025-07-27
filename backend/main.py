@@ -8,6 +8,7 @@ from services.stock_service import get_historical_data
 from config.database import db_manager
 import yfinance as yf
 import requests
+from datetime import datetime
 
 app = FastAPI()
 
@@ -160,10 +161,32 @@ def get_user_stats(user_firebase_uid: str = Header(..., alias="X-User-UID")):
 @app.get("/explore-stocks")
 def explore_data():
     try:
-        #get trending stocks from yfinance api internal endpoint
+        # Add debugging for the Yahoo API call
         trending_url = "https://query1.finance.yahoo.com/v1/finance/trending/US"
+        
+        print(f"Making request to: {trending_url}")
         response = requests.get(trending_url)
-        trending_data = response.json()
+        print(f"Response status: {response.status_code}")
+        print(f"Response length: {len(response.text)}")
+        print(f"First 200 chars: {response.text[:200]}")
+        
+        # Check for empty response
+        if not response.text.strip():
+            print("Empty response from Yahoo API")
+            return {"error": "Empty response from trending API"}
+        
+        # Try to parse JSON
+        try:
+            trending_data = response.json()
+        except Exception as json_error:
+            print(f"JSON parsing failed: {json_error}")
+            print(f"Raw response: {response.text[:500]}")
+            return {"error": "Invalid JSON from trending API"}
+
+        # Check if we got the expected structure
+        if 'finance' not in trending_data:
+            print(f"Unexpected response structure: {trending_data}")
+            return {"error": "Unexpected API response structure"}
 
         #filter out stock symbols
         stock_symbols = []
@@ -229,7 +252,7 @@ def explore_data():
                     'stock_count': len(stocks),
                     'top_stocks': top_performers[:4]
                 }
-                
+
         return {
             'trending': all_stocks[:15],
             'gainers': gainers_list[:12],
