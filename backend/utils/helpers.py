@@ -198,7 +198,7 @@ def determine_period(days_ahead: int):
     else:
         return "1y"    
 
-def stock_smart_constraint(historical_volatility: float, days_ahead: int):
+"""def stock_smart_constraint(historical_volatility: float, days_ahead: int):
     #auto-determining a stocks constraint based in its own behaviour
     annual_vol = historical_volatility * np.sqrt(252)
     time_factor = np.sqrt(days_ahead / 30)
@@ -222,4 +222,28 @@ def stock_smart_constraint(historical_volatility: float, days_ahead: int):
     # final constraint
     final_max = min(max_change, absolute_max)
 
+    return final_max"""
+def stock_smart_constraint(historical_volatility: float, days_ahead: int):
+    daily_vol = historical_volatility
+    time_scaled_vol = daily_vol * np.sqrt(days_ahead)
+    
+    if days_ahead <= 3:
+        multiplier = 0.8   
+        absolute_max = 0.025  
+    elif days_ahead <= 7:
+        multiplier = 1.0   
+        absolute_max = 0.04   
+    elif days_ahead <= 30:
+        multiplier = 1.2   
+        absolute_max = 0.12   
+    else:
+        multiplier = 1.5
+        absolute_max = 0.25   
+    
+    calculated_max = time_scaled_vol * multiplier
+    final_max = min(calculated_max, absolute_max)
+    
+    # NO minimum - let stable stocks be stable!
     return final_max
+
+
