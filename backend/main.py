@@ -440,7 +440,7 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
                     )
                 
                 fit_time = time.time() - start_time
-                total_time_used += fit_time
+                total_time += fit_time
                 
                 # Check if this is the best model so far
                 if fitted.aic < best_aic:
@@ -450,13 +450,13 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
                     print(f"ARIMA{params} succeeded in {fit_time:.2f}s, AIC: {fitted.aic:.2f}")
                 
                 # decent model and are running out of time, stop
-                if best_aic < 0 and total_time_used > 3.0:
-                    print(f"Good ARIMA model found, stopping early at {total_time_used:.1f}s")
+                if best_aic < 0 and total_time > 3.0:
+                    print(f"Good ARIMA model found, stopping early at {total_time:.1f}s")
                     break
                     
             except Exception as e:
                 fit_time = time.time() - start_time
-                total_time_used += fit_time
+                total_time += fit_time
                 print(f"ARIMA{params} failed in {fit_time:.2f}s: {str(e)[:50]}")
                 continue
         
@@ -496,7 +496,7 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
                     'method': 'ARIMA_success',
                     'model_params': best_params,
                     'aic': best_aic,
-                    'total_time': round(total_time_used, 2)
+                    'total_time': round(total_time, 2)
                 }
                 
             except Exception as e:
@@ -569,7 +569,7 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
             'method': 'statistical_fallback_after_arima_failed',
             'model_params': 'stat_fallback',
             'arima_attempts': len(arima_strategies),
-            'total_time': round(total_time_used, 2)
+            'total_time': round(total_time, 2)
         }
         
     except Exception as e:
