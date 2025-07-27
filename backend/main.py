@@ -227,6 +227,8 @@ def explore_data():
 
                 #secotr grping
                 sector = info.get('sector', 'Other')
+                print(f"{s}: sector = '{sector}'")
+                
                 if sector not in sectors_dict:
                     sectors_dict[sector] = []
                 sectors_dict[sector].append(stock_data)

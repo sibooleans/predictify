@@ -230,20 +230,23 @@ const styles = StyleSheet.create({
   tabScrollView: {
     marginBottom: 20,
     paddingLeft: 20,
+    maxHeight: 60,
   },
   tabContent: {
     paddingRight: 20,
+    alignItems: 'center',
   },
   tabButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginRight: 12,
-    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginRight: 10,
+    borderRadius: 18,
     backgroundColor: '#111',
     borderWidth: 1,
     borderColor: '#333',
+    minWidth: 80,
   },
   activeTabButton: {
     backgroundColor: '#00ccff',
