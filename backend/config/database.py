@@ -136,7 +136,7 @@ class DatabaseManager:
             cursor.execute(
                 """INSERT INTO users (firebase_uid, email, username) 
                    VALUES (%s, %s) RETURNING id""",
-                (firebase_uid, email)
+                (firebase_uid, email, username)
             )
             user_id = cursor.fetchone()['id']
             db_conn.commit()
@@ -150,7 +150,7 @@ class DatabaseManager:
         finally:
             cursor.close()
             db_conn.close()
-            
+
     def check_username_exists(self, username: str) -> bool:
     #check for existing username.
         db_conn = self.get_connection()

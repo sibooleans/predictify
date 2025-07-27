@@ -48,7 +48,7 @@ export default function Login() {
                 // If username resolution fails, try original input as email
             }
         }
-        await signInWithEmailAndPassword(auth, loginField, password);
+        await signInWithEmailAndPassword(auth, emailToUse, password);
         Alert.alert("Welcome back!', 'Login successful.");
         router.replace('/(tabs)');
 

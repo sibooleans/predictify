@@ -39,6 +39,8 @@ export default function SignupScreen() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'X-User-UID': auth.currentUser?.uid || '',
+                        'X-User-Email': auth.currentUser?.email || '',
                     },
                     body: JSON.stringify({ username })
                 });
