@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Ionicons } from '@expo/vector-icons';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -14,7 +15,8 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: '#00ccff',
+        tabBarInactiveTintColor: '#666',
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
@@ -22,27 +24,73 @@ export default function TabLayout() {
           ios: {
             // Use a transparent background on iOS to show the blur effect
             position: 'absolute',
+            backgroundColor: '#000', // Dark background
+            borderTopColor: '#333',
+            borderTopWidth: 1,
           },
-          default: {},
+          default: {
+            backgroundColor: '#000',
+            borderTopColor: '#333', 
+            borderTopWidth: 1,
+            height: 85,
+            paddingBottom: 20,
+            paddingTop: 8,
+          },
         }),
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+        },
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }: { color: string }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color }: { color: string }) => (
+            <Ionicons name="home" size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
           title: 'Explore',
-          tabBarIcon: ({ color }: { color: string }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          tabBarIcon: ({ color }: { color: string }) => (
+            <Ionicons name="compass" size={24} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="predict"
+        options={{
+          title: 'Predict',
+          tabBarIcon: ({ color }: { color: string }) => (
+            <Ionicons name="analytics" size={24} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: 'History',
+          tabBarIcon: ({ color }: { color: string }) => (
+            <Ionicons name="time" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color }: { color: string }) => (
+            <Ionicons name="person" size={24} color={color} />
+          ),
         }}
       />
     </Tabs>
   );
 }
 
-//not changed from default, works so far.
-//gotta change icons for the little tabs at the bottom, follow the default coding for explore and home page.
+// changed icons for the little tabs at the bottom, follow the default coding for explore and home page.
