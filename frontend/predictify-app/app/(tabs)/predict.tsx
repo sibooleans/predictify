@@ -16,6 +16,7 @@ import Slider from '@react-native-community/slider';
 import { format, addDays } from 'date-fns';
 import { LineChart, ProgressChart } from 'react-native-chart-kit'
 import { LogBox } from 'react-native';
+import { api } from '../../utils/apiClient'
 
 // Suppress known warnings from chart library
 LogBox.ignoreLogs([
@@ -114,24 +115,11 @@ export default function PredictScreen() {
     setLoading(true);
     setResult(null); //this one i add for cleating results
     try {
-      const response = await fetch(
-        `https://predictify-zcef.onrender.com/predict?stock=${stock}&days_ahead=${daysAhead}`,
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
+      const data = await api.getPrediction(stock, daysAhead);
 
       //got to switch this out to ngrok. figure out the debugging. reconsidering the switch as ngrok buggy.
       //any other way to solve the prob where connection has to be same btw laptop and phone?
       //ngrok tunnel breaks aft 2 hrs??
-      const data = await response.json();
 
       //check if render got error, if have manual deploy commit
       if (data.error) {
