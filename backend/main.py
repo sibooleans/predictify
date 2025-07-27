@@ -315,6 +315,30 @@ def determine_period(days_ahead: int):
     else:
         return "1y"    
 
+def stock_smart_constraint(historical_volatility: float, days_ahead: int):
+    #auto-determining a stocks constraint based in its own behaviour
+    annual_vol = historical_volatility * np.sqrt(252)
+    time_factor = np.sqrt(days_ahead / 30)
+    monthly_expected_move = annual_vol / np.sqrt(12)
+
+    if days_ahead <= 30:  
+        max_change = monthly_expected_move * time_factor * 1.5  # 1.5x buffer
+    elif days_ahead <= 60: 
+        max_change = monthly_expected_move * time_factor * 1.3  # Less buffer 
+    else:  
+        max_change = monthly_expected_move * time_factor * 1.2  # Even less buffer
+    
+    # limits
+    if days_ahead <= 30:
+        absolute_max = 0.20  # 20% absolute max for 1 month
+    elif days_ahead <= 60:
+        absolute_max = 0.30  # 30% absolute max for 2 months
+    else:
+        absolute_max = 0.40  # 40% absolute max for longer
+    
+    # final constraint
+    final_max = min(max_change, absolute_max)
+
 #ARIMA Model
 
 def simple_arima_prediction(prices: list, days_ahead: int, current_price: float):
@@ -411,41 +435,74 @@ def random_forest_prediction(prices: list, days_ahead: int, current_price: float
     try:
         if len(prices) < 30:
             # no data for rf
-            trend = (prices[-1] - prices[0]) / len(prices) if len(prices) > 1 else 0
-            predicted_price = current_price + (trend * days_ahead)
+            if len(prices) > 5:
+                # conservative
+                recent_trend = (prices[-1] - prices[-10]) / 10 if len(prices) >= 10 else 0
+                predicted_price = current_price + (recent_trend * days_ahead * 0.1)  
+            else:
+                predicted_price = current_price
+
             return {
                 'predicted_price': predicted_price,
                 'confidence': 45,
                 'method': 'trend_extrapolation'
             }
-            #pretty much the same method as under the predict function, just now moving it out.
-        #prepare features
+        
+        daily_returns = []
+        for i in range(1, min(len(prices), 252)):  # Last year of data max
+            daily_return = (prices[-i] - prices[-i-1]) / prices[-i-1]
+            daily_returns.append(daily_return)
+        
+        if not daily_returns:
+            return {
+                'predicted_price': current_price,
+                'confidence': 40,
+                'method': 'no_returns_data'
+            }
+        
+        # realistic constraints based on historical volatility
+        historical_volatility = np.std(daily_returns)
+        annual_volatility = historical_volatility * np.sqrt(252)  # Annualized volatility
+        
+        # annual volatility for realistic bounds
+        time_factor = days_ahead / 252  # Fraction of a year
+        expected_volatility = annual_volatility * np.sqrt(time_factor)
+        #pretty much the same method as under the predict function, just now moving it out.
+        
         X = []
         y = []
         
         size = 20
         for i in range(size, len(prices) - days_ahead):
             window = prices[i-size:i]
+
+            current_window_price = prices[i]
             
             # Enhanced features
             features = [
                 i,  # Time index
-                np.mean(window[-5:]),   
-                np.mean(window[-10:]), 
-                np.mean(window[-20:]),  
-                np.std(window),         # volatility
+                np.mean(window[-5:]) / current_window_price,   
+                np.mean(window[-10:]) / current_window_price, 
+                np.mean(window[-20:]) / current_window_price, 
+
+                (window[-1] - window[-5]) / window[-5] if len(window) >= 5 else 0,  # 5-day momentum
+                (window[-1] - window[-10]) / window[-10] if len(window) >= 10 else 0, # 10-day momentum
+
+                np.std(window[-10:]) / np.mean(window[-10:]) if np.mean(window[-10:]) > 0 else 0, # volatility
+
                 window[-1],             # current price
                 (window[-1] - window[0]) / window[0],  
-                (window[-1] - window[-5]) / window[-5] if len(window) >= 5 else 0,  
-                np.max(window) / np.min(window) if np.min(window) > 0 else 1,  
+
+                np.max(window) - np.min(window)/ np.mean(window) if np.mean(window) > 0 else 0,  
             ]
             X.append(features)
-            y.append(prices[i + days_ahead])
+            
         
         if len(X) < 15:
             # not enough training data
-            avg_return = np.mean(np.diff(prices) / prices[:-1])
-            predicted_price = current_price * (1 + avg_return * days_ahead * 0.1)
+            avg_return = np.mean(daily_returns[-30:]) if len(daily_returns) >= 30 else 0
+            predicted_change = avg_return * days_ahead * 0.5  # Very conservative
+            predicted_price = current_price * (1 + predicted_change)
             return {
                 'predicted_price': predicted_price,
                 'confidence': 40,
@@ -453,49 +510,68 @@ def random_forest_prediction(prices: list, days_ahead: int, current_price: float
             }
         
         # training model
-        model = RandomForestRegressor(n_estimators=100, random_state=42, max_depth=15)
+        model = RandomForestRegressor(n_estimators=100, 
+                                      random_state=42,
+                                      max_depth=8,
+                                      min_samples_split=5,
+                                      min_samples_leaf=2)
         model.fit(X, y)
         
         # prediction
         current_window = prices[-size:]
         current_features = [
-            len(prices),
-            np.mean(current_window[-5:]),
-            np.mean(current_window[-10:]),
-            np.mean(current_window[-20:]),
-            np.std(current_window),
-            current_price,
-            (current_price - current_window[0]) / current_window[0],
-            (current_price - current_window[-5]) / current_window[-5] if len(current_window) >= 5 else 0,
-            np.max(current_window) / np.min(current_window) if np.min(current_window) > 0 else 1,
+            np.mean(current_window[-5:]) / current_price,
+            np.mean(current_window[-10:]) / current_price,
+            np.mean(current_window[-20:]) / current_price,
+            (current_window[-1] - current_window[-5]) / current_window[-5] if len(current_window) >= 5 else 0,
+            (current_window[-1] - current_window[-10]) / current_window[-10] if len(current_window) >= 10 else 0,
+            np.std(current_window[-10:]) / np.mean(current_window[-10:]) if np.mean(current_window[-10:]) > 0 else 0,
+            (current_window[-1] - current_window[0]) / current_window[0],
+            (np.max(current_window) - np.min(current_window)) / np.mean(current_window) if np.mean(current_window) > 0 else 0
         ]
         
-        predicted_price = model.predict([current_features])[0]
+        predicted_relative_change = model.predict([current_features])[0]
+
+        max_change = stock_smart_constraint(historical_volatility, days_ahead)
         
+        predicted_relative_change = np.clip(predicted_relative_change, -max_change, max_change)
+
+        #relativity to tevert to long term trends over months
+        if days_ahead > 30:
+            long_term_return = np.mean(daily_returns) * days_ahead
+            predicted_relative_change = predicted_relative_change * 0.7 + long_term_return * 0.3
+
         # confidence
         score = model.score(X, y)
         confidence = max(45, min(70, int(score * 85)))
+
+        if days_ahead > 30: #reduce confidence for long predicts
+            confidence_penalty = min(15, (days_ahead - 30) * 0.3)
+            base_confidence -= confidence_penalty
         
-        # constraints
-        max_change = 0.30  # 30% max for longer-term
-        min_price = current_price * (1 - max_change)
-        max_price = current_price * (1 + max_change)
-        predicted_price = max(min_price, min(max_price, predicted_price))
-        
+        final_confidence = max(40, int(base_confidence))
         return {
             'predicted_price': predicted_price,
             'confidence': confidence,
-            'method': 'RandomForest'
+            'method': 'RandomForest',
+            'predicted_change_percent': predicted_relative_change * 100,
+            'max_allowed_change': max_change * 100
         }
         
     except Exception as e:
         print(f"Random Forest error: {e}")
         # Trend fallback
-        if len(prices) > 5:
-            recent_trend = (prices[-1] - prices[-5]) / 5
-            predicted_price = current_price + (recent_trend * days_ahead)
+        if len(prices) > 10: #conservative
+            recent_prices = prices[-min(30, len(prices)):]
+            trend = (recent_prices[-1] - recent_prices[0]) / len(recent_prices)
+            predicted_price = current_price + (trend * days_ahead * 0.2) 
         else:
             predicted_price = current_price
+
+        max_fallback_change = 0.15  # 15% max even for fallback
+        min_price = current_price * (1 - max_fallback_change)
+        max_price = current_price * (1 + max_fallback_change)
+        predicted_price = max(min_price, min(max_price, predicted_price))
         
         return {
             'predicted_price': predicted_price,
@@ -528,6 +604,8 @@ def get_model_info(days_ahead: int):
             'confidence_range': '55-70%'
         }
 
+
+
 # predict endpoint
 @app.get("/predict")
 
@@ -556,11 +634,11 @@ def predict(stock: str = "AAPL", days_ahead: int = 1):
             return {"error": "Insufficient historical data for prediction"}
         
         if days_ahead <= 7:
-            # SHORT-TERM: Use ARIMA
+            # SHORT-TERM: ARIMA
             prediction_result = simple_arima_prediction(prices, days_ahead, current_price)
             model_info = get_model_info(days_ahead)
         else:
-            # LONG-TERM: Use Random Forest
+            # LONG-TERM: Random Forest
             prediction_result =random_forest_prediction(prices, days_ahead, current_price)
             model_info = get_model_info(days_ahead)
 
