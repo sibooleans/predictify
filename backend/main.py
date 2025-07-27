@@ -364,14 +364,27 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
             }
         
         # simple ARIMA models
+        fast_params = [
+            (1,1,1),  # Most common for daily stock returns
+            (0,1,1),  # Simple MA model
+            (1,1,0),  # Simple AR model  
+            (2,1,1),  # Slightly more complex
+            (1,1,2)   # Alternative complex
+        ]
+    
         best_model = None
         best_aic = float('inf')
         best_params = None
         
-        # simple combinations
-        simple_params = [(1,1,1), (2,1,1), (1,1,2), (2,1,2), (0,1,1)]
+        #attempt to fix issue that arima takes LOADS of time
+        import time
+        start_time = time.time()
+        max_time = 3.0
         
-        for params in simple_params:
+        for params in fast_params:
+            if time.time() - start_time > max_time:
+                print(f"ARIMA timeout after {max_time} seconds")
+                break
             try:
                 model = ARIMA(recent_returns, order=params)
                 fitted = model.fit()
@@ -379,13 +392,19 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
                     best_aic = fitted.aic
                     best_model = fitted
                     best_params = params
-            except:
+            except Exception as e:
                 continue
         
         if best_model is None:
             # fallback to moving average
             avg_return = np.mean(recent_returns[-7:])  # last week
             predicted_price = current_price * (1 + avg_return * days_ahead * 0.5)
+
+            max_change = 0.10 if days_ahead <= 3 else 0.15
+            min_price = current_price * (1 - max_change)
+            max_price = current_price * (1 + max_change)
+            predicted_price = max(min_price, min(max_price, predicted_price))
+            
             return {
                 'predicted_price': predicted_price,
                 'confidence': 50,
@@ -430,116 +449,272 @@ def simple_arima_prediction(prices: list, days_ahead: int, current_price: float)
             'method': 'error_fallback',
             'model_params': 'error'
         }
-    
+
+def fallback_prediction(prices: list, days_ahead: int, current_price: float):
+    #if random forest fails. fall back to a simple trend extrapolation.
+    try:
+        if len(prices) > 10:
+            #trend from recent prices
+            recent_count = min(20, len(prices))  # Use last 20 days or all available
+            recent_prices = prices[-recent_count:]
+            
+            #linear trend
+            if len(recent_prices) >= 3:
+                # Simple slope calculation
+                x_vals = list(range(len(recent_prices)))
+                y_vals = recent_prices
+                
+                #trend (change per day)
+                n = len(recent_prices)
+                sum_x = sum(x_vals)
+                sum_y = sum(y_vals)
+                sum_xy = sum(x * y for x, y in zip(x_vals, y_vals))
+                sum_x2 = sum(x * x for x in x_vals)
+                
+                # linear regression slope
+                if n * sum_x2 - sum_x * sum_x != 0:
+                    slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
+                else:
+                    slope = 0
+                
+                # conservative trend
+                trend_prediction = current_price + (slope * days_ahead * 0.3)  # 30% of full trend
+            else:
+                # in case of not enough data.
+                avg_change = (recent_prices[-1] - recent_prices[0]) / len(recent_prices)
+                trend_prediction = current_price + (avg_change * days_ahead * 0.1)
+            
+            # conservative constraints to keep control (fallback should be safe)
+            if days_ahead <= 30:
+                max_change_percent = 0.08  # 8% max for monthly fallback
+            elif days_ahead <= 60:
+                max_change_percent = 0.12  # 12% max for 2-month fallback
+            else:
+                max_change_percent = 0.15  # 15% max for longer fallback
+            
+            min_price = current_price * (1 - max_change_percent)
+            max_price = current_price * (1 + max_change_percent)
+            safe_prediction = max(min_price, min(max_price, trend_prediction))
+            
+            # confidence based off quality of datas
+            if len(prices) > 30:
+                confidence = 40
+            elif len(prices) > 20:
+                confidence = 35
+            else:
+                confidence = 30
+            
+            return {
+                'predicted_price': safe_prediction,
+                'confidence': confidence,
+                'method': 'trend_fallback',
+                'data_points': len(recent_prices)
+            }
+            
+        elif len(prices) >= 3:
+            # minimal change
+            recent_change = (prices[-1] - prices[-3]) / 2  # Average of last 2 days
+            minimal_prediction = current_price + (recent_change * days_ahead * 0.05)  # Very conservative
+            
+            # constraints
+            max_change = current_price * 0.05  # 5% max when very little data
+            min_price = current_price - max_change
+            max_price = current_price + max_change
+            safe_prediction = max(min_price, min(max_price, minimal_prediction))
+            
+            return {
+                'predicted_price': safe_prediction,
+                'confidence': 25,
+                'method': 'minimal_data_fallback',
+                'data_points': len(prices)
+            }
+        
+        else:
+            #really really suay suay no data - return current price
+            return {
+                'predicted_price': current_price,
+                'confidence': 20,
+                'method': 'no_change_fallback',
+                'data_points': len(prices)
+            }
+        
+    except Exception as e:
+        print(f"Even fallback prediction failed: {e}")
+        # for emergency also just return current price
+        return {
+            'predicted_price': current_price,
+            'confidence': 15,
+            'method': 'emergency_fallback',
+            'error': str(e)
+        }
 def random_forest_prediction(prices: list, days_ahead: int, current_price: float):
     try:
-        if len(prices) < 30:
-            # no data for rf
-            if len(prices) > 5:
-                # conservative
-                recent_trend = (prices[-1] - prices[-10]) / 10 if len(prices) >= 10 else 0
-                predicted_price = current_price + (recent_trend * days_ahead * 0.1)  
-            else:
-                predicted_price = current_price
-
-            return {
-                'predicted_price': predicted_price,
-                'confidence': 45,
-                'method': 'trend_extrapolation'
-            }
+        if len(prices) < 50:
+            print(f"Not enough price data: {len(prices)} points, need at least 50")
+            return fallback_prediction(prices, days_ahead, current_price)
         
         daily_returns = []
         for i in range(1, min(len(prices), 252)):  # Last year of data max
-            daily_return = (prices[-i] - prices[-i-1]) / prices[-i-1]
-            daily_returns.append(daily_return)
+            if prices[-i-1] > 0:  # Avoid division by zero
+                daily_return = (prices[-i] - prices[-i-1]) / prices[-i-1]
+                if abs(daily_return) < 0.5:  # Filter out extreme outliers (50%+ moves)
+                    daily_returns.append(daily_return)
         
-        if not daily_returns:
-            return {
-                'predicted_price': current_price,
-                'confidence': 40,
-                'method': 'no_returns_data'
-            }
+        if len(daily_returns) < 20:
+            print(f"Not enough valid daily returns: {len(daily_returns)}")
+            return fallback_prediction(prices, days_ahead, current_price)
         
         # realistic constraints based on historical volatility
         historical_volatility = np.std(daily_returns)
-        annual_volatility = historical_volatility * np.sqrt(252)  # Annualized volatility
+        if historical_volatility == 0:
+            print("Zero volatility detected")
+            return fallback_prediction(prices, days_ahead, current_price)
+        '''annual_volatility = historical_volatility * np.sqrt(252)  # Annualized volatility
         
         # annual volatility for realistic bounds
         time_factor = days_ahead / 252  # Fraction of a year
-        expected_volatility = annual_volatility * np.sqrt(time_factor)
+        expected_volatility = annual_volatility * np.sqrt(time_factor)'''
         #pretty much the same method as under the predict function, just now moving it out.
         
         X = []
         y = []
         
         size = 20
-        for i in range(size, len(prices) - days_ahead):
-            window = prices[i-size:i]
 
-            current_window_price = prices[i]
-            
-            # Enhanced features
-            features = [
-                i,  # Time index
-                np.mean(window[-5:]) / current_window_price,   
-                np.mean(window[-10:]) / current_window_price, 
-                np.mean(window[-20:]) / current_window_price, 
+        min_data_needed = size + days_ahead + 10  # Extra buffer
 
-                (window[-1] - window[-5]) / window[-5] if len(window) >= 5 else 0,  # 5-day momentum
-                (window[-1] - window[-10]) / window[-10] if len(window) >= 10 else 0, # 10-day momentum
-
-                np.std(window[-10:]) / np.mean(window[-10:]) if np.mean(window[-10:]) > 0 else 0, # volatility
-
-                window[-1],             # current price
-                (window[-1] - window[0]) / window[0],  
-
-                np.max(window) - np.min(window)/ np.mean(window) if np.mean(window) > 0 else 0,  
-            ]
-            X.append(features)
-            
+        if len(prices) < min_data_needed:
+            print(f"Insufficient data for windowing: need {min_data_needed}, have {len(prices)}")
+            return fallback_prediction(prices, days_ahead, current_price)
         
-        if len(X) < 15:
-            # not enough training data
-            avg_return = np.mean(daily_returns[-30:]) if len(daily_returns) >= 30 else 0
-            predicted_change = avg_return * days_ahead * 0.5  # Very conservative
-            predicted_price = current_price * (1 + predicted_change)
-            return {
-                'predicted_price': predicted_price,
-                'confidence': 40,
-                'method': 'insufficient_data'
-            }
+        for i in range(size, len(prices) - days_ahead):
+            try:
+                window = prices[i-size:i]
+                current_window_price = prices[i]
+                future_price = prices[i + days_ahead]
+            
+                if (len(window) != size or 
+                    current_window_price <= 0 or 
+                    future_price <= 0 or
+                    any(p <= 0 for p in window)):
+                    continue
+                
+                # calculate features with error checking
+                try:
+                    features = [
+                        np.mean(window[-5:]) / current_window_price,
+                        np.mean(window[-10:]) / current_window_price,
+                        np.mean(window[-20:]) / current_window_price,
+                        (window[-1] - window[-5]) / window[-5] if len(window) >= 5 and window[-5] > 0 else 0,
+                        (window[-1] - window[-10]) / window[-10] if len(window) >= 10 and window[-10] > 0 else 0,
+                        np.std(window[-10:]) / np.mean(window[-10:]) if np.mean(window[-10:]) > 0 else 0,
+                        (window[-1] - window[0]) / window[0] if window[0] > 0 else 0,
+                        (np.max(window) - np.min(window)) / np.mean(window) if np.mean(window) > 0 else 0
+                    ]
+                    
+                    # validate features (no NaN, no infinity)
+                    if any(not np.isfinite(f) for f in features):
+                        continue
+                    
+                    # calculate target (relative change)
+                    relative_change = (future_price - current_window_price) / current_window_price
+                    
+                    # validate target
+                    if not np.isfinite(relative_change) or abs(relative_change) > 1.0: 
+                        continue
+                    
+                    X.append(features)
+                    y.append(relative_change)
+                    
+                except (ZeroDivisionError, ValueError, IndexError):
+                    continue
+            
+            except Exception as e:
+                print(f"Error processing window {i}: {e}")
+                continue
+        
+        # got enpugh training data?
+        if len(X) < 20:  #min20 samples
+            print(f"Not enough valid training samples: {len(X)}, need at least 20")
+            return fallback_prediction(prices, days_ahead, current_price)
+        
+        print(f"Training Random Forest with {len(X)} samples")
+        
+        # convert to numpy arrays with validation
+        try:
+            X = np.array(X)
+            y = np.array(y)
+            
+            # Check for empty arrays or wrong shapes
+            if X.shape[0] == 0 or y.shape[0] == 0:
+                print(f"Empty arrays after conversion: X shape {X.shape}, y shape {y.shape}")
+                return fallback_prediction(prices, days_ahead, current_price)
+            
+            if X.shape[0] != y.shape[0]:
+                print(f"Mismatched array sizes: X {X.shape[0]}, y {y.shape[0]}")
+                return fallback_prediction(prices, days_ahead, current_price)
+                
+        except Exception as e:
+            print(f"Error converting to numpy arrays: {e}")
+            return fallback_prediction(prices, days_ahead, current_price)
+        
         
         # training model
-        model = RandomForestRegressor(n_estimators=100, 
-                                      random_state=42,
-                                      max_depth=8,
-                                      min_samples_split=5,
-                                      min_samples_leaf=2)
-        model.fit(X, y)
+        try:
+            model = RandomForestRegressor(n_estimators=50, 
+                                        random_state=42,
+                                        max_depth=8,
+                                        min_samples_split=5,
+                                        min_samples_leaf=2)
+            model.fit(X, y)
+
+        except Exception as e:
+            print(f"Error training Random Forest: {e}")
+            return fallback_prediction(prices, days_ahead, current_price)
+
         
-        # prediction
-        current_window = prices[-size:]
-        current_features = [
-            np.mean(current_window[-5:]) / current_price,
-            np.mean(current_window[-10:]) / current_price,
-            np.mean(current_window[-20:]) / current_price,
-            (current_window[-1] - current_window[-5]) / current_window[-5] if len(current_window) >= 5 else 0,
-            (current_window[-1] - current_window[-10]) / current_window[-10] if len(current_window) >= 10 else 0,
-            np.std(current_window[-10:]) / np.mean(current_window[-10:]) if np.mean(current_window[-10:]) > 0 else 0,
-            (current_window[-1] - current_window[0]) / current_window[0],
-            (np.max(current_window) - np.min(current_window)) / np.mean(current_window) if np.mean(current_window) > 0 else 0
-        ]
+        # prediction w validaion
+        try:
+            current_window = prices[-size:]
+            if len(current_window) != size or any(p <= 0 for p in current_window):
+                print("Invalid current window for prediction")
+                return fallback_prediction(prices, days_ahead, current_price)
         
-        predicted_relative_change = model.predict([current_features])[0]
+            current_features = [
+                np.mean(current_window[-5:]) / current_price,
+                np.mean(current_window[-10:]) / current_price,
+                np.mean(current_window[-20:]) / current_price,
+                (current_window[-1] - current_window[-5]) / current_window[-5] if len(current_window) >= 5 else 0,
+                (current_window[-1] - current_window[-10]) / current_window[-10] if len(current_window) >= 10 else 0,
+                np.std(current_window[-10:]) / np.mean(current_window[-10:]) if np.mean(current_window[-10:]) > 0 else 0,
+                (current_window[-1] - current_window[0]) / current_window[0],
+                (np.max(current_window) - np.min(current_window)) / np.mean(current_window) if np.mean(current_window) > 0 else 0
+            ]
+        
+            if any(not np.isfinite(f) for f in current_features):
+                print("Invalid features for prediction")
+                return fallback_prediction(prices, days_ahead, current_price)
+
+            predicted_relative_change = model.predict([current_features])[0]
+
+            if not np.isfinite(predicted_relative_change):
+                print("Model returned invalid prediction")
+                return fallback_prediction(prices, days_ahead, current_price)
+            
+        except Exception as e:
+            print(f"Error making prediction: {e}")
+            return fallback_prediction(prices, days_ahead, current_price)
+        
 
         max_change = stock_smart_constraint(historical_volatility, days_ahead)
-        
         predicted_relative_change = np.clip(predicted_relative_change, -max_change, max_change)
 
+        predicted_price = current_price * (1 + predicted_relative_change)
+
         #relativity to tevert to long term trends over months
-        if days_ahead > 30:
-            long_term_return = np.mean(daily_returns) * days_ahead
-            predicted_relative_change = predicted_relative_change * 0.7 + long_term_return * 0.3
+        '''if days_ahead > 30:
+        long_term_return = np.mean(daily_returns) * days_ahead
+        predicted_relative_change = predicted_relative_change * 0.7 + long_term_return * 0.3'''
 
         # confidence
         score = model.score(X, y)
@@ -547,37 +722,20 @@ def random_forest_prediction(prices: list, days_ahead: int, current_price: float
 
         if days_ahead > 30: #reduce confidence for long predicts
             confidence_penalty = min(15, (days_ahead - 30) * 0.3)
-            base_confidence -= confidence_penalty
+            confidence -= confidence_penalty
         
-        final_confidence = max(40, int(base_confidence))
+        final_confidence = max(40, int(confidence))
         return {
             'predicted_price': predicted_price,
-            'confidence': confidence,
+            'confidence': final_confidence,
             'method': 'RandomForest',
-            'predicted_change_percent': predicted_relative_change * 100,
-            'max_allowed_change': max_change * 100
+            'training_samples': len(X)
         }
-        
+    
     except Exception as e:
         print(f"Random Forest error: {e}")
-        # Trend fallback
-        if len(prices) > 10: #conservative
-            recent_prices = prices[-min(30, len(prices)):]
-            trend = (recent_prices[-1] - recent_prices[0]) / len(recent_prices)
-            predicted_price = current_price + (trend * days_ahead * 0.2) 
-        else:
-            predicted_price = current_price
+        return fallback_prediction(prices, days_ahead, current_price)
 
-        max_fallback_change = 0.15  # 15% max even for fallback
-        min_price = current_price * (1 - max_fallback_change)
-        max_price = current_price * (1 + max_fallback_change)
-        predicted_price = max(min_price, min(max_price, predicted_price))
-        
-        return {
-            'predicted_price': predicted_price,
-            'confidence': 35,
-            'method': 'trend_fallback'
-        }
 
 def get_model_info(days_ahead: int):
    #courtesy of frontend
