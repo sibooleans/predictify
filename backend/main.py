@@ -40,6 +40,78 @@ def setup_database():
         return {"message": "Tables created successfully!"}
     except Exception as e:
         return {"error": f"Failed to create tables: {str(e)}"}
+#username
+@app.get("/setup-username")
+def add_username_support():
+    try:
+        db_manager.add_username_column()
+        return {"message": "Username column added successfully!"}
+    except Exception as e:
+        return {"error": f"Failed to add username column: {str(e)}"}
+    
+@app.post("/save-username")
+def save_username(
+    username: str,
+    user_firebase_uid: str = Header(..., alias="X-User-UID"),
+    user_email: str = Header(..., alias="X-User-Email")
+):
+    try:
+        # existing user check
+        if db_manager.check_username_exists(username):
+            return {"error": "Username already taken"}
+        
+        db_conn = db_manager.get_connection()
+        cursor = db_conn.cursor()
+        
+        cursor.execute(
+            "UPDATE users SET username = %s WHERE firebase_uid = %s",
+            (username, user_firebase_uid)
+        )
+        db_conn.commit()
+        cursor.close()
+        db_conn.close()
+        
+        return {"message": "Username saved successfully"}
+        
+    except Exception as e:
+        return {"error": f"Failed to save username: {str(e)}"}
+    
+@app.post("/check-username")
+def check_username_availability(username: str):
+    try:
+        exists = db_manager.check_username_exists(username)
+        return {"available": not exists}
+    except Exception as e:
+        return {"error": f"Failed to check username: {str(e)}"}
+
+@app.post("/resolve-login")
+def resolve_login(login_input: str):
+    #user to email
+    try:
+        # is it email?
+        if '@' in login_input:
+            return {"email": login_input, "type": "email"}
+        
+        # else its a user so link email
+        db_conn = db_manager.get_connection()
+        cursor = db_conn.cursor()
+        
+        cursor.execute(
+            "SELECT email FROM users WHERE username = %s",
+            (login_input,)
+        )
+        user = cursor.fetchone()
+        cursor.close()
+        db_conn.close()
+        
+        if user:
+            return {"email": user['email'], "type": "username"}
+        else:
+            return {"error": "Username not found"}
+            
+    except Exception as e:
+        print(f"Error resolving login credential: {e}")
+        return {"error": "Failed to resolve login credential"}
 
 @app.get("/")
 def root():

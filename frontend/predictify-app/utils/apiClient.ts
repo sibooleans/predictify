@@ -57,4 +57,26 @@ export const api = {
   
     healthCheck: () =>
         fetch(`${api_baseurl}/health/database`).then(r => r.json()),
+
+    //username
+    saveUsername: (username: string) =>
+        apiCall('/save-username', {
+            method: 'POST',
+            body: { username }
+        }),
+    
+    checkUsername: (username: string) =>
+        fetch(`${api_baseurl}/check-username?username=${username}`, {
+            method: 'POST'
+        }).then(r => r.json()),
+    
+    resolveLogin: (loginInput: string) =>
+        fetch(`${api_baseurl}/resolve-login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ login_input: loginInput })
+        }).then(r => r.json()),
 };
+

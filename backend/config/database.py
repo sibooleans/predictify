@@ -21,6 +21,38 @@ class DatabaseManager:
             print(f"Database connection error: {e}")
             raise
     
+    def add_username_column(self):
+        db_conn = self.get_connection()
+        cursor = db_conn.cursor()
+    
+        try:
+        # check 4 existing
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name='users' AND column_name='username';
+            """)
+        
+            if not cursor.fetchone():
+                cursor.execute("""
+                    ALTER TABLE users 
+                    ADD COLUMN username VARCHAR(50) UNIQUE;
+                """)
+                print("Username column added successfully")
+            else:
+                print("Username column already exists")
+            #maybe can get rid of these print statements especially in the other db parts
+            
+            db_conn.commit()
+        
+        except Exception as e:
+            db_conn.rollback()
+            print(f"Error adding username column: {e}")
+            raise
+        finally:
+            cursor.close()
+            db_conn.close()
+    
     def create_tables(self):
         #create tables for sql
         db_conn = self.get_connection()
@@ -32,6 +64,7 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
                     firebase_uid VARCHAR(255) UNIQUE NOT NULL,
+                    username VARCHAR(50) UNIQUE,
                     email VARCHAR(255) NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -83,7 +116,7 @@ class DatabaseManager:
             cursor.close()
             db_conn.close()
         
-    def createorget_user(self, firebase_uid: str, email: str) -> int:
+    def createorget_user(self, firebase_uid: str, email: str, username: str = None) -> int:
     #get user id of existing user or make new
         db_conn = self.get_connection()
         cursor = db_conn.cursor()
@@ -101,19 +134,37 @@ class DatabaseManager:
             
             # creaying new user
             cursor.execute(
-                """INSERT INTO users (firebase_uid, email) 
+                """INSERT INTO users (firebase_uid, email, username) 
                    VALUES (%s, %s) RETURNING id""",
                 (firebase_uid, email)
             )
             user_id = cursor.fetchone()['id']
             db_conn.commit()
-            print(f"Created new user: {email}")
+            print(f"Created new user: {email} with username: {username}")
             return user_id
             
         except Exception as e:
             db_conn.rollback()
             print(f"Error managing user: {e}")
             raise
+        finally:
+            cursor.close()
+            db_conn.close()
+            
+    def check_username_exists(self, username: str) -> bool:
+    #check for existing username.
+        db_conn = self.get_connection()
+        cursor = db_conn.cursor()
+    
+        try:
+            cursor.execute(
+                "SELECT id FROM users WHERE username = %s",
+                (username,)
+            )
+            return cursor.fetchone() is not None
+        except Exception as e:
+            print(f"Error checking username: {e}")
+            return False
         finally:
             cursor.close()
             db_conn.close()
