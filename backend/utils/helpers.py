@@ -5,7 +5,7 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-
+import yfinance as yf
 #helpers
 
 analyzer = SentimentIntensityAnalyzer()
@@ -250,101 +250,84 @@ def get_sentiment(symbol: str):
             "reason": "Sentiment analysis unavailable"
         }'''
 
-reddit_session = requests.Session()
-reddit_session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    'Accept': 'application/json',
-    'Referer': 'https://www.reddit.com/'
-})
+# Replace your get_sentiment function with this Yahoo Finance news version
 
-retry_strategy = Retry(
-    total=3,
-    backoff_factor=1,
-    status_forcelist=[429, 500, 502, 503, 504],
-)
-adapter = HTTPAdapter(max_retries=retry_strategy)
-reddit_session.mount("http://", adapter)
-reddit_session.mount("https://", adapter)
 
 analyzer = SentimentIntensityAnalyzer()
 
 def get_sentiment(symbol: str):
-    """Simple Reddit sentiment with session bypass and basic reasoning"""
-    
-    # Try multiple subreddits for better success rate
-    subreddits = ['stocks', 'investing', 'SecurityAnalysis']
-    
-    for subreddit in subreddits:
-        try:
-            url = f"https://www.reddit.com/r/{subreddit}/search.json?q={symbol}&sort=new&limit=10"
-            
-            print(f"[DEBUG] Trying r/{subreddit} for {symbol}")
-            
-            # Use session instead of requests.get (bypass method)
-            response = reddit_session.get(url, timeout=10)
-            
-            print(f"[DEBUG] Response status: {response.status_code}")
-            
-            if response.status_code != 200:
-                print(f"[DEBUG] r/{subreddit} failed with {response.status_code}, trying next...")
-                continue
-                
-            data = response.json()
-            
-            sentiments = []
-            post_count = 0
-            sample_titles = []
-            
-            for post in data['data']['children']:
-                title = post['data']['title']
-                score = analyzer.polarity_scores(title)['compound']
-                sentiments.append(score)
-                post_count += 1
-                
-                # Keep first 2 titles as examples
-                if len(sample_titles) < 2:
-                    sample_titles.append(title[:50] + "..." if len(title) > 50 else title)
-            
-            if not sentiments:
-                print(f"[DEBUG] No posts found in r/{subreddit}, trying next...")
-                continue
-            
-            # Found posts! Analyze sentiment
-            avg_sentiment = sum(sentiments) / len(sentiments)
-            print(f"[DEBUG] Found {post_count} posts in r/{subreddit}, avg sentiment: {avg_sentiment}")
-            
-            # Create reason with post count and sentiment strength (your original logic)
-            if avg_sentiment > 0.2:
-                sentiment_word = "Positive"
-                reason = f"Bullish across {post_count} Reddit posts"
-            elif avg_sentiment > 0.05:
-                sentiment_word = "Positive" 
-                reason = f"Mildly positive in {post_count} Reddit posts"
-            elif avg_sentiment < -0.2:
-                sentiment_word = "Negative"
-                reason = f"Bearish across {post_count} Reddit posts"
-            elif avg_sentiment < -0.05:
-                sentiment_word = "Negative"
-                reason = f"Mildly negative in {post_count} Reddit posts"
-            else:
-                sentiment_word = "Neutral"
-                reason = f"Mixed opinions in {post_count} Reddit posts"
-            
+    """Get sentiment from Yahoo Finance news headlines"""
+    try:
+        print(f"[DEBUG] Getting news sentiment for {symbol}")
+        
+        ticker = yf.Ticker(symbol)
+        news = ticker.news
+        
+        if not news or len(news) == 0:
+            print(f"[DEBUG] No news found for {symbol}")
             return {
-                "sentiment": sentiment_word,
-                "reason": reason
+                "sentiment": "Neutral",
+                "reason": "No recent news coverage"
             }
+        
+        print(f"[DEBUG] Found {len(news)} news articles")
+        
+        sentiments = []
+        news_count = min(5, len(news))  # Use recent 5 news items
+        sample_headlines = []
+        
+        for item in news[:news_count]:
+            title = item.get('title', '')
+            if not title:
+                continue
+                
+            # Use VADER sentiment analysis on headlines
+            score = analyzer.polarity_scores(title)['compound']
+            sentiments.append(score)
             
-        except Exception as e:
-            print(f"[DEBUG] Error with r/{subreddit}: {e}")
-            continue
-    
-    # If all subreddits fail
-    print("[DEBUG] All Reddit sources failed")
-    return {
-        "sentiment": "Neutral",
-        "reason": "No recent Reddit discussions found"
-    }
+            # Keep sample headlines for debugging
+            if len(sample_headlines) < 2:
+                sample_headlines.append(title[:60] + "..." if len(title) > 60 else title)
+            
+            print(f"[DEBUG] Headline: '{title[:50]}...' Score: {score}")
+        
+        if not sentiments:
+            return {
+                "sentiment": "Neutral", 
+                "reason": "No analyzable news headlines"
+            }
+        
+        avg_sentiment = sum(sentiments) / len(sentiments)
+        print(f"[DEBUG] Average sentiment from {len(sentiments)} headlines: {avg_sentiment}")
+        
+        # Create reason with news count and sentiment strength (same logic as Reddit version)
+        if avg_sentiment > 0.2:
+            sentiment_word = "Positive"
+            reason = f"Positive news coverage ({news_count} articles)"
+        elif avg_sentiment > 0.05:
+            sentiment_word = "Positive" 
+            reason = f"Mildly positive news ({news_count} articles)"
+        elif avg_sentiment < -0.2:
+            sentiment_word = "Negative"
+            reason = f"Negative news coverage ({news_count} articles)"
+        elif avg_sentiment < -0.05:
+            sentiment_word = "Negative"
+            reason = f"Concerning news tone ({news_count} articles)"
+        else:
+            sentiment_word = "Neutral"
+            reason = f"Mixed news coverage ({news_count} articles)"
+        
+        return {
+            "sentiment": sentiment_word,
+            "reason": reason
+        }
+        
+    except Exception as e:
+        print(f"[DEBUG] Yahoo Finance news error: {e}")
+        return {
+            "sentiment": "Neutral",
+            "reason": "News analysis unavailable"
+        }
 
 
 def obtain_volatility(prices):
