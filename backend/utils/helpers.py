@@ -256,7 +256,7 @@ def get_sentiment(symbol: str):
 analyzer = SentimentIntensityAnalyzer()
 
 def get_sentiment(symbol: str):
-    """Get sentiment from Yahoo Finance news headlines"""
+    """Get sentiment from Yahoo Finance news headlines with detailed debugging"""
     try:
         print(f"[DEBUG] Getting news sentiment for {symbol}")
         
@@ -274,48 +274,50 @@ def get_sentiment(symbol: str):
         
         sentiments = []
         news_count = min(5, len(news))  # Use recent 5 news items
-        sample_headlines = []
         
-        for item in news[:news_count]:
+        for i, item in enumerate(news[:news_count]):
+            print(f"[DEBUG] Processing article {i+1}")
+            print(f"[DEBUG] Article keys: {list(item.keys())}")
+            
             title = item.get('title', '')
-            if not title:
+            print(f"[DEBUG] Title: '{title}'")
+            
+            if not title or len(title.strip()) == 0:
+                print(f"[DEBUG] Empty title, skipping")
                 continue
-                
-            # Use VADER sentiment analysis on headlines
-            score = analyzer.polarity_scores(title)['compound']
-            sentiments.append(score)
             
-            # Keep sample headlines for debugging
-            if len(sample_headlines) < 2:
-                sample_headlines.append(title[:60] + "..." if len(title) > 60 else title)
-            
-            print(f"[DEBUG] Headline: '{title[:50]}...' Score: {score}")
+            try:
+                # Use VADER sentiment analysis on headlines
+                score = analyzer.polarity_scores(title)['compound']
+                sentiments.append(score)
+                print(f"[DEBUG] Headline: '{title[:50]}...' Score: {score}")
+            except Exception as e:
+                print(f"[DEBUG] Error analyzing headline: {e}")
+                continue
+        
+        print(f"[DEBUG] Total sentiments collected: {len(sentiments)}")
         
         if not sentiments:
+            print("[DEBUG] No sentiments were collected!")
+            # Fallback - return neutral with count
             return {
                 "sentiment": "Neutral", 
-                "reason": "No analyzable news headlines"
+                "reason": f"Found {news_count} articles but couldn't analyze"
             }
         
         avg_sentiment = sum(sentiments) / len(sentiments)
         print(f"[DEBUG] Average sentiment from {len(sentiments)} headlines: {avg_sentiment}")
         
-        # Create reason with news count and sentiment strength (same logic as Reddit version)
-        if avg_sentiment > 0.2:
+        # Create reason with news count and sentiment strength
+        if avg_sentiment > 0.1:  # Lowered threshold
             sentiment_word = "Positive"
-            reason = f"Positive news coverage ({news_count} articles)"
-        elif avg_sentiment > 0.05:
-            sentiment_word = "Positive" 
-            reason = f"Mildly positive news ({news_count} articles)"
-        elif avg_sentiment < -0.2:
+            reason = f"Positive news coverage ({len(sentiments)} articles)"
+        elif avg_sentiment < -0.1:  # Lowered threshold
             sentiment_word = "Negative"
-            reason = f"Negative news coverage ({news_count} articles)"
-        elif avg_sentiment < -0.05:
-            sentiment_word = "Negative"
-            reason = f"Concerning news tone ({news_count} articles)"
+            reason = f"Negative news coverage ({len(sentiments)} articles)"
         else:
             sentiment_word = "Neutral"
-            reason = f"Mixed news coverage ({news_count} articles)"
+            reason = f"Mixed news coverage ({len(sentiments)} articles)"
         
         return {
             "sentiment": sentiment_word,
@@ -324,10 +326,13 @@ def get_sentiment(symbol: str):
         
     except Exception as e:
         print(f"[DEBUG] Yahoo Finance news error: {e}")
+        import traceback
+        print(f"[DEBUG] Full traceback: {traceback.format_exc()}")
         return {
             "sentiment": "Neutral",
             "reason": "News analysis unavailable"
         }
+
 
 
 def obtain_volatility(prices):
