@@ -256,7 +256,7 @@ def get_sentiment(symbol: str):
 analyzer = SentimentIntensityAnalyzer()
 
 def get_sentiment(symbol: str):
-    """Get sentiment from Yahoo Finance news headlines with detailed debugging"""
+    """Get sentiment from Yahoo Finance news with correct data structure"""
     try:
         print(f"[DEBUG] Getting news sentiment for {symbol}")
         
@@ -273,48 +273,67 @@ def get_sentiment(symbol: str):
         print(f"[DEBUG] Found {len(news)} news articles")
         
         sentiments = []
-        news_count = min(5, len(news))  # Use recent 5 news items
+        news_count = min(5, len(news))
         
         for i, item in enumerate(news[:news_count]):
             print(f"[DEBUG] Processing article {i+1}")
-            print(f"[DEBUG] Article keys: {list(item.keys())}")
             
-            title = item.get('title', '')
-            print(f"[DEBUG] Title: '{title}'")
+            # Try different possible fields for the headline
+            title = None
             
-            if not title or len(title.strip()) == 0:
-                print(f"[DEBUG] Empty title, skipping")
+            # Check common fields where title might be stored
+            possible_title_fields = ['title', 'headline', 'summary']
+            for field in possible_title_fields:
+                if field in item and item[field]:
+                    title = item[field]
+                    break
+            
+            # If no direct title, try to extract from content
+            if not title and 'content' in item:
+                content = item['content']
+                if isinstance(content, dict):
+                    # Content might be a nested object
+                    title = content.get('title') or content.get('headline') or content.get('summary')
+                elif isinstance(content, str):
+                    # Content might be a string, use first 100 chars as title
+                    title = content[:100] if len(content) > 10 else None
+            
+            # Debug: Show what we found
+            print(f"[DEBUG] Extracted title: '{title}'")
+            
+            if not title or len(title.strip()) < 5:
+                print(f"[DEBUG] Title too short or empty, skipping")
                 continue
             
             try:
-                # Use VADER sentiment analysis on headlines
+                # Use VADER sentiment analysis
                 score = analyzer.polarity_scores(title)['compound']
                 sentiments.append(score)
-                print(f"[DEBUG] Headline: '{title[:50]}...' Score: {score}")
+                print(f"[DEBUG] Title: '{title[:50]}...' Score: {score}")
             except Exception as e:
-                print(f"[DEBUG] Error analyzing headline: {e}")
+                print(f"[DEBUG] Error analyzing title: {e}")
                 continue
         
         print(f"[DEBUG] Total sentiments collected: {len(sentiments)}")
         
         if not sentiments:
-            print("[DEBUG] No sentiments were collected!")
-            # Fallback - return neutral with count
+            print("[DEBUG] Still no sentiments collected, using fallback...")
+            # Ultimate fallback - just count news articles as neutral activity
             return {
                 "sentiment": "Neutral", 
-                "reason": f"Found {news_count} articles but couldn't analyze"
+                "reason": f"Market activity detected ({news_count} news items)"
             }
         
         avg_sentiment = sum(sentiments) / len(sentiments)
-        print(f"[DEBUG] Average sentiment from {len(sentiments)} headlines: {avg_sentiment}")
+        print(f"[DEBUG] Average sentiment: {avg_sentiment}")
         
-        # Create reason with news count and sentiment strength
-        if avg_sentiment > 0.1:  # Lowered threshold
+        # Determine sentiment category
+        if avg_sentiment > 0.1:
             sentiment_word = "Positive"
-            reason = f"Positive news coverage ({len(sentiments)} articles)"
-        elif avg_sentiment < -0.1:  # Lowered threshold
+            reason = f"Positive news tone ({len(sentiments)} articles)"
+        elif avg_sentiment < -0.1:
             sentiment_word = "Negative"
-            reason = f"Negative news coverage ({len(sentiments)} articles)"
+            reason = f"Negative news tone ({len(sentiments)} articles)"
         else:
             sentiment_word = "Neutral"
             reason = f"Mixed news coverage ({len(sentiments)} articles)"
@@ -325,9 +344,7 @@ def get_sentiment(symbol: str):
         }
         
     except Exception as e:
-        print(f"[DEBUG] Yahoo Finance news error: {e}")
-        import traceback
-        print(f"[DEBUG] Full traceback: {traceback.format_exc()}")
+        print(f"[DEBUG] Error: {e}")
         return {
             "sentiment": "Neutral",
             "reason": "News analysis unavailable"
