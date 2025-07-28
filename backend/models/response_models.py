@@ -13,6 +13,7 @@ class Prediction(BaseModel):
     current_price: float
     price_change: float
     price_change_percent: float
+    sentiment_reason: str = None
 
 class HistoricalData(BaseModel):
     date: str

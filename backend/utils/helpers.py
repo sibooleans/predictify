@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+import requests
 
 #helpers
 
@@ -149,25 +150,70 @@ def generate_pred_timeline(current_price: float, predicted_price: float,
 
 
 
-def get_sentiment(symbol: str):
-    #yet to use real tweets/reddit
-    mock_headlines = [
-        f"{symbol} shows strong growth potential!",
-        f"Mixed opinions on {symbol} stock today.",
-        f"Investors worry about Q3 earnings for {symbol}",
-    ]
+analyzer = SentimentIntensityAnalyzer()
 
-    scores = [analyzer.polarity_scores(text)["compound"] 
-              for text in mock_headlines]
+def get_sentiment(symbol: str):
     
-    avg = sum(scores) / len(scores)
-    if avg > 0.2:
-        return "Positive"
-    elif avg < -0.2:
-        return "Negative"
-    else:
-        return "Neutral"
-    
+    #reddit sentiment with basic rzning
+    try:
+        url = f"https://www.reddit.com/r/stocks/search.json?q={symbol}&sort=new&limit=10"
+        headers = {'User-Agent': 'StockApp/1.0'}
+
+        response = requests.get(url, headers = headers, timeout = 5)
+        data = response.json()
+
+        sentiments = []
+        posts_count = 0
+        sample_titles = []
+
+        #for loop to find posts on reddit
+        for post in data['data']['children']:
+            title = post['data']['title']
+            score = analyzer.polarity_scores(title)['compound']
+            sentiments.append(score)
+            post_count += 1
+
+            if len(sample_titles) < 2:
+                sample_titles.append(title[:50] + "..." if len(title) > 50 else title)
+            
+        if not sentiments:
+            return {
+                "sentiment": "Neutral",
+                "reason": "No recent Reddit discussions found"
+            }
+        
+        avg_sentiment = sum(sentiments) / len(sentiments)
+
+        #basic post count for reason on frontend.
+
+        if avg_sentiment > 0.2:
+            sentiment_word = "Positive"
+            reason = f"Bullish across {post_count} Reddit posts"
+        elif avg_sentiment > 0.05:
+            sentiment_word = "Positive" 
+            reason = f"Mildly positive in {post_count} Reddit posts"
+        elif avg_sentiment < -0.2:
+            sentiment_word = "Negative"
+            reason = f"Bearish across {post_count} Reddit posts"
+        elif avg_sentiment < -0.05:
+            sentiment_word = "Negative"
+            reason = f"Mildly negative in {post_count} Reddit posts"
+        else:
+            sentiment_word = "Neutral"
+            reason = f"Mixed opinions in {post_count} Reddit posts"
+        
+        return {
+            "sentiment": sentiment_word,
+            "reason": reason
+        }
+            
+    except Exception as e:
+        return {
+            "sentiment": "Neutral",
+            "reason": "Sentiment analysis unavailable"
+        }
+
+
 def obtain_volatility(prices):
     if len(prices) < 2:
         return "Unknown"

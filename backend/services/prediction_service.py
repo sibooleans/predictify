@@ -589,7 +589,12 @@ def predict(stock: str = "AAPL", days_ahead: int = 1):
 
         predicted_price = prediction_result['predicted_price']
         confidence = prediction_result['confidence']    
-        sentiment = get_sentiment(stock)
+
+        sentiment_data = get_sentiment(stock)
+        sentiment = sentiment_data["sentiment"]
+        sentiment_reason = sentiment_data.get("reason", "")
+
+
         vol = obtain_volatility(prices)
         
         result = Prediction(
@@ -598,11 +603,12 @@ def predict(stock: str = "AAPL", days_ahead: int = 1):
             confidence = confidence,
             volatility = vol,
             trend = "Uptrend" if predicted_price > current_price_data["current_price"] else "Downtrend",
-            sentiment = sentiment,
+            sentiment = sentiment, 
             timestamp = datetime.now().isoformat(),
             current_price = current_price_data["current_price"],
             price_change = current_price_data["price_change"],
-            price_change_percent = current_price_data["price_change_percent"]
+            price_change_percent = current_price_data["price_change_percent"],
+            sentiment_reason = sentiment_reason
         )
         #timeline
         pred_timeline = generate_pred_timeline(

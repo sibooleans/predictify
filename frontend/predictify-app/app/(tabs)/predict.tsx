@@ -17,7 +17,6 @@ import { format, addDays } from 'date-fns';
 import { LineChart, ProgressChart } from 'react-native-chart-kit'
 import { LogBox } from 'react-native';
 import { api } from '../../utils/apiClient'
-import { VictoryChart, VictoryLine, VictoryScatter, VictoryAxis } from 'victory';
 
 // Suppress known warnings from chart library
 LogBox.ignoreLogs([
@@ -39,6 +38,7 @@ type Prediction = {
     current_price: number;
     price_change: number;
     price_change_percent: number;
+    sentiment_reason?: string;
 }
 
 type HistoricalData = {
@@ -209,91 +209,105 @@ export default function PredictScreen() {
 
   const predictedDate = result?.trading_info?.target_date_formatted || getApproximateTargetDate(daysAhead);
 
-  const historicalChartData = () => {
-    if (!result || !result.historical_data) return [];
-  
+  const connectedTimelineData = () => {
+    if (!result || !result?.historical_data || !result?.prediction_timeline) return null;
+
     const recentHistoryCount = Math.min(40, result.historical_data.length);
     const recentHistory = result.historical_data.slice(-recentHistoryCount);
-  
-    return recentHistory.map((item, index) => ({
-      x: index,
-      y: item.price,
-      date: item.date
-    }));
-  };
-
-  const predictionChartData = () => {
-    if (!result || !result.prediction_timeline) return [];
-  
-    const historicalLength = historicalChartData().length;
-    const currentPrice = result.prediction.current_price;
+    
+    // Prediction data
     const futurePoints = result.prediction_timeline.slice(1);
-  
-  // start it from curr price
-    const predictionData = [
-      { x: historicalLength, y: currentPrice, label: 'Now' },
-      ...futurePoints.map((item, index) => ({
-        x: historicalLength + index + 1,
-        y: item.price,
-        label: item.label || `+${item.day}d`
-      }))
+    
+    const historicalPrices = recentHistory.map((item: HistoricalData) => item.price);
+    const futurePrices = futurePoints.map((item: PredictionTimelinePoint) => item.price);
+    const allPrices = [...historicalPrices, ...futurePrices];
+    
+    //labels
+    const totalDataPoints = historicalPrices.length + futurePrices.length;
+    const maxLabels = 5; // Show maximum 5 labels total
+    const labelInterval = Math.max(1, Math.floor(totalDataPoints / maxLabels));
+
+    const historicalLabels = recentHistory.map((item: HistoricalData, index: number) => {
+    // Only show labels at calculated intervals or the last point
+      if (index % labelInterval === 0 || index === recentHistory.length - 1) {
+        return format(new Date(item.date), 'MM/dd');
+      }
+      return '';
+    });
+
+    const futureLabels = futurePoints.map((item: PredictionTimelinePoint, index: number) => {
+    // Show fewer future labels - only every 3rd point or the last one
+    if (index % Math.max(3, Math.floor(futurePoints.length / 2)) === 0 || index === futurePoints.length - 1) {
+      return item.label || `+${item.day}d`;
+    }
+    return '';
+    });
+
+    const allLabels = [...historicalLabels, ...futureLabels];
+    //different styling for historical vs prediction
+     const datasets = [
+      {
+        data: allPrices,
+        color: (opacity = 1) => `rgba(0, 204, 255, ${opacity})`,
+        strokeWidth: 3
+      }
     ];
-  
-    return predictionData;
-  };
-  // marker to mark out todays point
-  const currentPriceMarker = () => {
-    if (!result) return [];
-  
-    const historicalLength = historicalChartData().length;
-    return [{
-      x: historicalLength,
-      y: result.prediction.current_price,
-      label: 'NOW'
-    }];
+
+    return { 
+      labels: allLabels, 
+      datasets,
+      transitionIndex: historicalPrices.length - 1 // hist endpoint
+    };
   };
 
-  const chartLabels = () => {
-    if (!result) return [];
-  
-    const historical = historicalChartData();
-    const prediction = predictionChartData();
-    const totalPoints = historical.length + prediction.length;
-  
-  // Create labels with good spacing
-    const labels = [];
-    const labelInterval = Math.max(1, Math.floor(totalPoints / 6));
-  
-  // Historical labels
-    historical.forEach((item, index) => {
-      if (index % labelInterval === 0 || index === historical.length - 1) {
-        labels.push({
-          x: index,
-          label: format(new Date(item.date), 'MM/dd')
-        });
-      }
-    });
-  
-  // tdy price label
-    labels.push({
-      x: historical.length,
-      label: 'NOW'
-    });
-  
-  // pred labels
-    prediction.slice(1).forEach((item, index) => {
-      const actualIndex = historical.length + index + 1;
-      if (index % 2 === 0 || index === prediction.length - 2) {
-        labels.push({
-          x: actualIndex,
-          label: item.label || `+${index + 1}d`
-        });
-      }
-    });
-  
-    return labels;
-  };
+  // Chart configuration
+  const chartConfig = {
+    backgroundColor: '#111',
+    backgroundGradientFrom: '#111',
+    backgroundGradientTo: '#222',
+    decimalPlaces: 2,
+    color: (opacity = 1) => `rgba(0, 204, 255, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+    style: {
+      borderRadius: 16
+    },
+    propsForDots: {
+      r: "4",
+      strokeWidth: "2",
+      stroke: "#00ccff"
+    },
+    propsForBackgroundLines: {
+      strokeDasharray: "",
+      stroke: "#333",
+      strokeWidth: 1
+    },
+    propsForLabels: {
+    fontSize: 9, // Smaller font
+    },
+    formatXLabel: (value: string) => {
+    // Truncate long labels and skip empty ones
+      if (!value || value.trim() === '') return '';
+      return value.length > 5 ? value.substring(0, 5) : value;
+    },
+    segments: 4, // less horizontal grid lines
+  }
 
+  const predictionChartConfig = {
+    backgroundColor: '#111',
+    backgroundGradientFrom: '#001a2e',
+    backgroundGradientTo: '#111',
+    decimalPlaces: 2,
+    color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`,
+    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+    style: {
+      borderRadius: 16
+    },
+    propsForDots: {
+      r: "4",
+      strokeWidth: "2",
+      stroke: "#4CAF50"
+    }
+  };
 
   const getModelDisplayInfo = (daysAhead: number, modelInfo?: ModelInfo) => {
   if (daysAhead <= 7) {
@@ -442,72 +456,43 @@ export default function PredictScreen() {
           </View>
 
           {/*Connected Timeline Chart - Historical + Prediction*/}
-          {result && (
+          {connectedTimelineData() && (
             <View style={styles.chartCard}>
               <Text style={styles.chartTitle}>
                 {getModelDisplayInfo(daysAhead).icon} {result.chart_info.title} → {result.model_info?.model_name || 'AI Prediction'}
               </Text>
               <View style={styles.chartContainer}>
-                <VictoryChart
+                <LineChart
+                  data={connectedTimelineData()!}
                   width={chartWidth}
                   height={220}
-                  padding={{ left: 60, top: 20, right: 40, bottom: 60 }}
-                  style={{
-                    background: { fill: "#111" }
+                  chartConfig={{
+                    backgroundColor: '#111',
+                    backgroundGradientFrom: '#111',
+                    backgroundGradientTo: '#222',
+                    decimalPlaces: 2,
+                    color: (opacity = 1) => `rgba(0, 204, 255, ${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                    style: { borderRadius: 16 },
+                    propsForDots: {
+                      r: "3",
+                      strokeWidth: "2",
+                      stroke: "#00ccff"
+                    },
+                    propsForBackgroundLines: {
+                      strokeDasharray: "",
+                      stroke: "#333",
+                      strokeWidth: 1
+                    }
                   }}
-                >
-                  {/* Historical data line - Cyan */}
-                  <VictoryLine
-                    data={historicalChartData()}
-                    style={{
-                      data: { 
-                        stroke: "#00ccff", 
-                        strokeWidth: 3 
-                      }
-                    }}
-                    animate={{
-                      duration: 800,
-                      onLoad: { duration: 500 }
-                    }}
-                  />
-                  
-                  {/* Prediction data line - Green dashed */}
-                  <VictoryLine
-                    data={predictionChartData()}
-                    style={{
-                      data: { 
-                        stroke: "#4CAF50", 
-                        strokeWidth: 3,
-                        strokeDasharray: "5,5"
-                      }
-                    }}
-                    animate={{
-                      duration: 800,
-                      onLoad: { duration: 500 }
-                    }}
-                  />
-                  
-                  {/* tdy price marker - dot */}
-                  <VictoryScatter
-                    data={currentPriceMarker()}
-                    style={{
-                      data: { 
-                        fill: "#FFD700", 
-                        stroke: "#FFD700",
-                        strokeWidth: 3
-                      }
-                    }}
-                    size={8}
-                    animate={{
-                      duration: 800,
-                      onLoad: { duration: 500 }
-                    }}
-                  />
-                  
-                  
-                </VictoryChart>
+                  bezier
+                  style={styles.chart}
+                  withHorizontalLabels={true}
+                  withVerticalLabels={true}
+                  withDots={true}
+                  withShadow={false}
+                />
               </View>
-              
               <View style={styles.chartLegend}>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: '#00ccff' }]} />
@@ -527,7 +512,7 @@ export default function PredictScreen() {
               </Text>
             </View>
           )}
-          
+
           {/*Confidence Meter*/}
           <View style={styles.confidenceSection}>
             <View style={styles.confidenceHeader}>
@@ -598,42 +583,14 @@ export default function PredictScreen() {
               {result.prediction.sentiment}
             </Text>
             <Text style={styles.metricLabel}>Market Sentiment</Text>
+            {result.prediction.sentiment_reason && (
+              <Text style={styles.sentimentReason}>
+                {result.prediction.sentiment_reason}
+              </Text>
+            )}
           </View>
         </View>
 
-         {/*Confidence Chart*/}
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>🎯 Model Confidence Analysis</Text>
-            <View style={styles.chartContainer}>
-              <ProgressChart
-                data={{
-                  labels: ["Confidence", "Accuracy", "Reliability"],
-                  data: [
-                    result.prediction.confidence / 100,
-                    Math.min(result.prediction.confidence / 100 + 0.1, 1),
-                    result.prediction.confidence > 
-                    80 ? 0.9 : result.prediction.confidence > 60 ? 0.7 : 0.5
-                  ]
-                }}
-                width={chartWidth}
-                height={200}
-                strokeWidth={16}
-                radius={32}
-                chartConfig={{
-                  backgroundColor: '#111',
-                  backgroundGradientFrom: '#111',
-                  backgroundGradientTo: '#222',
-                  color: (opacity = 1, index = 0) => {
-                    const colors = ['#00ccff', '#4CAF50', '#FF9800'];
-                    return colors[index] || `rgba(255, 255, 255, ${opacity})`;
-                  },
-                  labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                }}
-                hideLegend={false}
-                style={styles.chart}
-              />
-            </View>
-          </View>
 
         {/*Model Information*/}
         <View style={styles.modelInfo}>
@@ -1060,5 +1017,13 @@ const styles = StyleSheet.create({
     color: '#ccc',
     fontSize: 14,
     lineHeight: 20,
+  },
+  sentimentReason: {
+    fontSize: 9,
+    color: '#aaa',
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
+    paddingHorizontal: 4,
   },
 });
