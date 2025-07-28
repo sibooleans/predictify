@@ -17,6 +17,7 @@ import { format, addDays } from 'date-fns';
 import { LineChart, ProgressChart } from 'react-native-chart-kit'
 import { LogBox } from 'react-native';
 import { api } from '../../utils/apiClient'
+import { VictoryChart, VictoryLine, VictoryScatter, VictoryAxis } from 'victory';
 
 // Suppress known warnings from chart library
 LogBox.ignoreLogs([
@@ -208,130 +209,91 @@ export default function PredictScreen() {
 
   const predictedDate = result?.trading_info?.target_date_formatted || getApproximateTargetDate(daysAhead);
 
-  const connectedTimelineData = () => {
-    if (!result || !result?.historical_data || !result?.prediction_timeline) return null;
-
+  const historicalChartData = () => {
+    if (!result || !result.historical_data) return [];
+  
     const recentHistoryCount = Math.min(40, result.historical_data.length);
     const recentHistory = result.historical_data.slice(-recentHistoryCount);
-    
-    // Prediction data
-    const futurePoints = result.prediction_timeline.slice(1);
-    
-    const historicalPrices = recentHistory.map((item: HistoricalData) => item.price);
-    const futurePrices = futurePoints.map((item: PredictionTimelinePoint) => item.price);
-    //const allPrices = [...historicalPrices, ...futurePrices];
+  
+    return recentHistory.map((item, index) => ({
+      x: index,
+      y: item.price,
+      date: item.date
+    }));
+  };
 
+  const predictionChartData = () => {
+    if (!result || !result.prediction_timeline) return [];
+  
+    const historicalLength = historicalChartData().length;
     const currentPrice = result.prediction.current_price;
-    
-    //labels
-    const totalPoints = historicalPrices.length + futurePrices.length;
-    const labelInterval = Math.max(1, Math.floor(totalPoints / 6)); //cap it at 6
-    const historicalLabels = recentHistory.map((item: HistoricalData, index: number) => {
-    if (index % labelInterval === 0 || index === recentHistory.length - 1) {
-      return format(new Date(item.date), 'MM/dd');
-    }
-    return '';
-  });
-    
-    const futureLabels = futurePoints.map((item: PredictionTimelinePoint, index: number) => {
-      if (index % Math.max(1, Math.floor(futurePoints.length / 3)) === 0 || index === futurePoints.length - 1) {
-      return item.label || `+${item.day}d`;
+    const futurePoints = result.prediction_timeline.slice(1);
+  
+  // start it from curr price
+    const predictionData = [
+      { x: historicalLength, y: currentPrice, label: 'Now' },
+      ...futurePoints.map((item, index) => ({
+        x: historicalLength + index + 1,
+        y: item.price,
+        label: item.label || `+${item.day}d`
+      }))
+    ];
+  
+    return predictionData;
+  };
+  // marker to mark out todays point
+  const currentPriceMarker = () => {
+    if (!result) return [];
+  
+    const historicalLength = historicalChartData().length;
+    return [{
+      x: historicalLength,
+      y: result.prediction.current_price,
+      label: 'NOW'
+    }];
+  };
+
+  const chartLabels = () => {
+    if (!result) return [];
+  
+    const historical = historicalChartData();
+    const prediction = predictionChartData();
+    const totalPoints = historical.length + prediction.length;
+  
+  // Create labels with good spacing
+    const labels = [];
+    const labelInterval = Math.max(1, Math.floor(totalPoints / 6));
+  
+  // Historical labels
+    historical.forEach((item, index) => {
+      if (index % labelInterval === 0 || index === historical.length - 1) {
+        labels.push({
+          x: index,
+          label: format(new Date(item.date), 'MM/dd')
+        });
       }
-      return '';
     });
-    
-    //combine everyt
-    const allPrices = [...historicalPrices, currentPrice, ...futurePrices];
-    const allLabels = [...historicalLabels, 'Now', ...futureLabels];
-    
-    //different styling for historical vs prediction
-     const datasets = [
-      {
-        data: allPrices,
-        color: (opacity = 1) => `rgba(0, 204, 255, ${opacity})`,
-        strokeWidth: 3
-      },
-
-    {
-        
-      data: [
-        ...Array(historicalPrices.length - 1).fill(NaN), 
-        currentPrice,
-        ...Array(futurePrices.length).fill(NaN)
-      ],
-      color: (opacity = 1) => `rgba(255, 215, 0, ${opacity})`, // Gold color
-      strokeWidth: 0, //dot
-      withDots: true,
-    },
-    // prediction points green
-    {
-      data: [
-        ...Array(historicalPrices.length).fill(NaN), // Fill with NaN to start from current price
-        currentPrice, // Start prediction from current price
-        ...futurePrices
-      ],
-      color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`, // Green
-      strokeWidth: 3,
-      strokeDashArray: [5, 5], // dashed line for predictions
-    }
-  ];
-
-  return { 
-    labels: allLabels, 
-    datasets,
-    transitionIndex: historicalPrices.length // hist endpoint
-  };
-};
-      
-
-
-  // Chart configuration
-  const improved_chartConfig = {
-    backgroundColor: '#111',
-    backgroundGradientFrom: '#111',
-    backgroundGradientTo: '#222',
-    decimalPlaces: 2,
-    color: (opacity = 1) => `rgba(0, 204, 255, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-    style: {
-      borderRadius: 16
-    },
-    propsForDots: {
-      r: "4",
-      strokeWidth: "2",
-      stroke: "#00ccff"
-    },
-    propsForBackgroundLines: {
-      strokeDasharray: "",
-      stroke: "#333",
-      strokeWidth: 1
-    },
-    propsForLabels: {
-      fontSize: 10, //smaller font
-    },
-    formatXLabel: (value: string) => {
-    // Only show non-empty labels and truncate if needed
-      return value.length > 5 ? value.substring(0, 5) : value;
-    },
-  segments: 4,
+  
+  // tdy price label
+    labels.push({
+      x: historical.length,
+      label: 'NOW'
+    });
+  
+  // pred labels
+    prediction.slice(1).forEach((item, index) => {
+      const actualIndex = historical.length + index + 1;
+      if (index % 2 === 0 || index === prediction.length - 2) {
+        labels.push({
+          x: actualIndex,
+          label: item.label || `+${index + 1}d`
+        });
+      }
+    });
+  
+    return labels;
   };
 
-  const predictionChartConfig = {
-    backgroundColor: '#111',
-    backgroundGradientFrom: '#001a2e',
-    backgroundGradientTo: '#111',
-    decimalPlaces: 2,
-    color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-    style: {
-      borderRadius: 16
-    },
-    propsForDots: {
-      r: "4",
-      strokeWidth: "2",
-      stroke: "#4CAF50"
-    }
-  };
 
   const getModelDisplayInfo = (daysAhead: number, modelInfo?: ModelInfo) => {
   if (daysAhead <= 7) {
@@ -480,30 +442,72 @@ export default function PredictScreen() {
           </View>
 
           {/*Connected Timeline Chart - Historical + Prediction*/}
-          {connectedTimelineData() && (
+          {result && (
             <View style={styles.chartCard}>
               <Text style={styles.chartTitle}>
                 {getModelDisplayInfo(daysAhead).icon} {result.chart_info.title} → {result.model_info?.model_name || 'AI Prediction'}
               </Text>
               <View style={styles.chartContainer}>
-                <LineChart
-                  data={connectedTimelineData()!}
+                <VictoryChart
                   width={chartWidth}
                   height={220}
-                  chartConfig={improved_chartConfig}
-                  bezier={false}
-                  style={styles.chart}
-                  withHorizontalLabels={true}
-                  withVerticalLabels={true}
-                  withDots={true}
-                  withShadow={false}
-                  withInnerLines={true}
-                  withOuterLines={true}
-                  yLabelsOffset={10}
-                  xLabelsOffset={-5}
-                  fromZero={false}
-/>
+                  padding={{ left: 60, top: 20, right: 40, bottom: 60 }}
+                  style={{
+                    background: { fill: "#111" }
+                  }}
+                >
+                  {/* Historical data line - Cyan */}
+                  <VictoryLine
+                    data={historicalChartData()}
+                    style={{
+                      data: { 
+                        stroke: "#00ccff", 
+                        strokeWidth: 3 
+                      }
+                    }}
+                    animate={{
+                      duration: 800,
+                      onLoad: { duration: 500 }
+                    }}
+                  />
+                  
+                  {/* Prediction data line - Green dashed */}
+                  <VictoryLine
+                    data={predictionChartData()}
+                    style={{
+                      data: { 
+                        stroke: "#4CAF50", 
+                        strokeWidth: 3,
+                        strokeDasharray: "5,5"
+                      }
+                    }}
+                    animate={{
+                      duration: 800,
+                      onLoad: { duration: 500 }
+                    }}
+                  />
+                  
+                  {/* tdy price marker - dot */}
+                  <VictoryScatter
+                    data={currentPriceMarker()}
+                    style={{
+                      data: { 
+                        fill: "#FFD700", 
+                        stroke: "#FFD700",
+                        strokeWidth: 3
+                      }
+                    }}
+                    size={8}
+                    animate={{
+                      duration: 800,
+                      onLoad: { duration: 500 }
+                    }}
+                  />
+                  
+                  
+                </VictoryChart>
               </View>
+              
               <View style={styles.chartLegend}>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: '#00ccff' }]} />
@@ -523,7 +527,7 @@ export default function PredictScreen() {
               </Text>
             </View>
           )}
-
+          
           {/*Confidence Meter*/}
           <View style={styles.confidenceSection}>
             <View style={styles.confidenceHeader}>
