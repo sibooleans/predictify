@@ -385,7 +385,12 @@ def debug_users():
         
     except Exception as e:
         return {"error": f"Failed to fetch users: {str(e)}"}
+    
 
-
+@app.get("/test-sentiment/{symbol}")
+def test_sentiment(symbol: str):
+    from utils.helpers import get_sentiment
+    result = get_sentiment(symbol)
+    return result
  
     

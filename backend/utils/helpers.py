@@ -153,13 +153,23 @@ def generate_pred_timeline(current_price: float, predicted_price: float,
 analyzer = SentimentIntensityAnalyzer()
 
 def get_sentiment(symbol: str):
-    
+
     #reddit sentiment with basic rzning
     try:
+        print(f"[DEBUG] Starting sentiment analysis for {symbol}")
         url = f"https://www.reddit.com/r/stocks/search.json?q={symbol}&sort=new&limit=10"
         headers = {'User-Agent': 'StockApp/1.0'}
 
+        print(f"[DEBUG] Making request to: {url}")
         response = requests.get(url, headers = headers, timeout = 5)
+        print(f"[DEBUG] Response status: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"[DEBUG] Reddit API error: {response.status_code}")
+            return {
+                "sentiment": "Neutral",
+                "reason": f"Reddit API returned {response.status_code}"
+            }
         data = response.json()
 
         sentiments = []
@@ -172,17 +182,20 @@ def get_sentiment(symbol: str):
             score = analyzer.polarity_scores(title)['compound']
             sentiments.append(score)
             post_count += 1
+            print(f"[DEBUG] Post: '{title[:50]}...' Score: {score}")
 
             if len(sample_titles) < 2:
                 sample_titles.append(title[:50] + "..." if len(title) > 50 else title)
             
         if not sentiments:
+            print("[DEBUG] No posts found")
             return {
                 "sentiment": "Neutral",
                 "reason": "No recent Reddit discussions found"
             }
         
         avg_sentiment = sum(sentiments) / len(sentiments)
+        print(f"[DEBUG] Average sentiment: {avg_sentiment}")
 
         #basic post count for reason on frontend.
 
@@ -208,6 +221,7 @@ def get_sentiment(symbol: str):
         }
             
     except Exception as e:
+        print(f"[DEBUG] Exception occurred: {str(e)}")
         return {
             "sentiment": "Neutral",
             "reason": "Sentiment analysis unavailable"
