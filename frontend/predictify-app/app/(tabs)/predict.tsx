@@ -219,24 +219,30 @@ export default function PredictScreen() {
     
     const historicalPrices = recentHistory.map((item: HistoricalData) => item.price);
     const futurePrices = futurePoints.map((item: PredictionTimelinePoint) => item.price);
-    const allPrices = [...historicalPrices, ...futurePrices];
+    //const allPrices = [...historicalPrices, ...futurePrices];
+
+    const currentPrice = result.prediction.current_price;
     
     //labels
+    const totalPoints = historicalPrices.length + futurePrices.length;
+    const labelInterval = Math.max(1, Math.floor(totalPoints / 6)); //cap it at 6
     const historicalLabels = recentHistory.map((item: HistoricalData, index: number) => {
-      //label every 8-10 points
-      const interval = Math.ceil(recentHistory.length / 5);
-      if (index % interval === 0 || index === recentHistory.length - 1) {
-        return format(new Date(item.date), 'MM/dd');
+    if (index % labelInterval === 0 || index === recentHistory.length - 1) {
+      return format(new Date(item.date), 'MM/dd');
+    }
+    return '';
+  });
+    
+    const futureLabels = futurePoints.map((item: PredictionTimelinePoint, index: number) => {
+      if (index % Math.max(1, Math.floor(futurePoints.length / 3)) === 0 || index === futurePoints.length - 1) {
+      return item.label || `+${item.day}d`;
       }
       return '';
     });
     
-    const futureLabels = futurePoints.map((item: PredictionTimelinePoint, index: number) => {
-      //future labels
-      return item.label || (index % 5 === 0 ? `+${item.day}d` : '');
-    });
-    
-    const allLabels = [...historicalLabels, ...futureLabels];
+    //combine everyt
+    const allPrices = [...historicalPrices, currentPrice, ...futurePrices];
+    const allLabels = [...historicalLabels, 'Now', ...futureLabels];
     
     //different styling for historical vs prediction
      const datasets = [
@@ -244,18 +250,43 @@ export default function PredictScreen() {
         data: allPrices,
         color: (opacity = 1) => `rgba(0, 204, 255, ${opacity})`,
         strokeWidth: 3
-      }
-    ];
+      },
 
-    return { 
-      labels: allLabels, 
-      datasets,
-      transitionIndex: historicalPrices.length - 1 // hist endpoint
-    };
+    {
+        
+      data: [
+        ...Array(historicalPrices.length - 1).fill(NaN), 
+        currentPrice,
+        ...Array(futurePrices.length).fill(NaN)
+      ],
+      color: (opacity = 1) => `rgba(255, 215, 0, ${opacity})`, // Gold color
+      strokeWidth: 0, //dot
+      withDots: true,
+    },
+    // prediction points green
+    {
+      data: [
+        ...Array(historicalPrices.length).fill(NaN), // Fill with NaN to start from current price
+        currentPrice, // Start prediction from current price
+        ...futurePrices
+      ],
+      color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`, // Green
+      strokeWidth: 3,
+      strokeDashArray: [5, 5], // dashed line for predictions
+    }
+  ];
+
+  return { 
+    labels: allLabels, 
+    datasets,
+    transitionIndex: historicalPrices.length // hist endpoint
   };
+};
+      
+
 
   // Chart configuration
-  const chartConfig = {
+  const improved_chartConfig = {
     backgroundColor: '#111',
     backgroundGradientFrom: '#111',
     backgroundGradientTo: '#222',
@@ -274,7 +305,15 @@ export default function PredictScreen() {
       strokeDasharray: "",
       stroke: "#333",
       strokeWidth: 1
-    }
+    },
+    propsForLabels: {
+      fontSize: 10, //smaller font
+    },
+    formatXLabel: (value: string) => {
+    // Only show non-empty labels and truncate if needed
+      return value.length > 5 ? value.substring(0, 5) : value;
+    },
+  segments: 4,
   };
 
   const predictionChartConfig = {
@@ -451,32 +490,19 @@ export default function PredictScreen() {
                   data={connectedTimelineData()!}
                   width={chartWidth}
                   height={220}
-                  chartConfig={{
-                    backgroundColor: '#111',
-                    backgroundGradientFrom: '#111',
-                    backgroundGradientTo: '#222',
-                    decimalPlaces: 2,
-                    color: (opacity = 1) => `rgba(0, 204, 255, ${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                    style: { borderRadius: 16 },
-                    propsForDots: {
-                      r: "3",
-                      strokeWidth: "2",
-                      stroke: "#00ccff"
-                    },
-                    propsForBackgroundLines: {
-                      strokeDasharray: "",
-                      stroke: "#333",
-                      strokeWidth: 1
-                    }
-                  }}
-                  bezier
+                  chartConfig={improved_chartConfig}
+                  bezier={false}
                   style={styles.chart}
                   withHorizontalLabels={true}
                   withVerticalLabels={true}
                   withDots={true}
                   withShadow={false}
-                />
+                  withInnerLines={true}
+                  withOuterLines={true}
+                  yLabelsOffset={10}
+                  xLabelsOffset={-5}
+                  fromZero={false}
+/>
               </View>
               <View style={styles.chartLegend}>
                 <View style={styles.legendItem}>
